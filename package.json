@@ -1,0 +1,12 @@
+{
+    "name": "rmmz-game",
+    "main": "index.html",
+    "chromium-args": "--force-color-profile=srgb --disable-devtools",
+    "window": {
+        "title": "只能说话不能用鼠标或键盘控制的RPG：无声勇者 ~拥有音荡之力的勇者啊 请拯救这个世界~",
+        "width": 1920,
+        "height": 1080,
+        "position": "center",
+        "icon": "icon/icon.png"
+    }
+}
