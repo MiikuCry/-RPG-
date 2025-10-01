@@ -458,46 +458,102 @@ class CommandSystem {
     }
     
     /**
+     * 根据方向词获取方向
+     */
+    getDirectionFromWord(word) {
+        const directionMap = {
+            '上': 'up',
+            '下': 'down', 
+            '左': 'left',
+            '右': 'right'
+        };
+        return directionMap[word] || null;
+    }
+
+    /**
      * 新增：智能方向命令检测
      */
     checkDirectionCommand(text, context) {
-        // 方向命令的特征词
+        // 方向命令的特征词（优化版 - 修复"向右"被识别为"上"的问题）
         const directionPatterns = {
             up: {
                 keywords: ['上', '伤', '少', '尚'],
                 prefixes: ['向', '往', '朝'],
                 suffixes: ['走', '面', '方', '边'],
-                exclude: ['向右', '向左', '向下', '想'] // 排除词
+                exclude: ['向右', '向左', '向下', '想', '像', '响'], // 排除词
+                fullPatterns: ['向上', '往上', '朝上', '上走', '上面', '上边', '上方'] // 完整模式
             },
             down: {
                 keywords: ['下', '夏', '吓', '虾'],
                 prefixes: ['向', '往', '朝'],
                 suffixes: ['走', '面', '方', '边'],
-                exclude: ['向上', '向左', '向右']
+                exclude: ['向上', '向左', '向右', '想', '像', '响'],
+                fullPatterns: ['向下', '往下', '朝下', '下走', '下面', '下边', '下方']
             },
             left: {
                 keywords: ['左', '作', '做', '坐'],
                 prefixes: ['向', '往', '朝'],
                 suffixes: ['走', '面', '方', '边', '转'],
-                exclude: ['向上', '向下', '向右']
+                exclude: ['向上', '向下', '向右', '想', '像', '响'],
+                fullPatterns: ['向左', '往左', '朝左', '左走', '左边', '左转', '左面', '左方']
             },
             right: {
                 keywords: ['右', '有', '又', '油', '佑'],
                 prefixes: ['向', '往', '朝'],
                 suffixes: ['走', '面', '方', '边', '转'],
-                exclude: ['向上', '向下', '向左']
+                exclude: ['向上', '向下', '向左', '想', '像', '响'],
+                fullPatterns: ['向右', '往右', '朝右', '右走', '右边', '右转', '右面', '右方']
             }
         };
         
-        // 检查每个方向
+        // 检查每个方向（优化版 - 修复"向右"被识别为"上"的问题）
         for (const [direction, pattern] of Object.entries(directionPatterns)) {
-            // 首先检查排除词
-            const hasExclude = pattern.exclude.some(exc => text.includes(exc));
-            if (hasExclude && !pattern.keywords.some(kw => text === kw)) {
-                continue; // 如果包含排除词且不是单独的关键词，跳过
+            // 1. 首先检查完整模式匹配（优先级最高）
+            for (const fullPattern of pattern.fullPatterns) {
+                if (text === fullPattern || text.includes(fullPattern)) {
+                    console.log(`[CommandSystem] 完整模式匹配: ${fullPattern} -> ${direction}`);
+                    const command = this.getDirectionCommand(direction);
+                    if (command && this.isContextMatch(command, context)) {
+                        return {
+                            ...command,
+                            confidence: 1.0,
+                            matchedText: fullPattern
+                        };
+                    }
+                }
             }
             
-            // 检查是否包含方向关键词
+            // 2. 检查排除词（如果包含排除词，跳过此方向）
+            const hasExclude = pattern.exclude.some(exc => text.includes(exc));
+            if (hasExclude) {
+                console.log(`[CommandSystem] 包含排除词，跳过方向: ${direction}`);
+                continue;
+            }
+            
+            // 3. 特殊处理：如果文本以"向"开头，必须检查完整的方向词
+            if (text.startsWith('向')) {
+                // 只匹配"向" + 方向词的完整组合
+                const directionWords = ['上', '下', '左', '右'];
+                for (const dirWord of directionWords) {
+                    if (text === '向' + dirWord || text.startsWith('向' + dirWord)) {
+                        const targetDirection = this.getDirectionFromWord(dirWord);
+                        if (targetDirection === direction) {
+                            console.log(`[CommandSystem] 向字匹配: ${text} -> ${direction}`);
+                            const command = this.getDirectionCommand(direction);
+                            if (command && this.isContextMatch(command, context)) {
+                                return {
+                                    ...command,
+                                    confidence: 0.95,
+                                    matchedText: text
+                                };
+                            }
+                        }
+                    }
+                }
+                continue; // 如果是以"向"开头但不匹配任何方向，跳过
+            }
+            
+            // 3. 检查是否包含方向关键词
             let matchScore = 0;
             let matchedKeyword = '';
             
@@ -505,45 +561,48 @@ class CommandSystem {
                 if (text.includes(keyword)) {
                     matchedKeyword = keyword;
                     
-                    // 计算匹配分数
+                    // 计算匹配分数（更严格的匹配规则）
                     if (text === keyword) {
                         matchScore = 1.0; // 完全匹配
-                    } else if (text.length <= 3 && text.endsWith(keyword)) {
-                        matchScore = 0.95; // 短语尾部匹配（如"向右"）
-                    } else if (text.length <= 3 && text.startsWith(keyword)) {
-                        matchScore = 0.9; // 短语开头匹配（如"右走"）
-                    } else {
-                        // 检查前缀+关键词组合
+                    } else if (text.length <= 4) {
+                        // 短文本的精确匹配
                         for (const prefix of pattern.prefixes) {
-                            if (text === prefix + keyword || text === prefix + keyword + '走') {
+                            if (text === prefix + keyword) {
                                 matchScore = 0.95;
                                 break;
                             }
                         }
                         
-                        // 检查关键词+后缀组合
-                        if (matchScore < 0.9) {
+                        for (const suffix of pattern.suffixes) {
+                            if (text === keyword + suffix) {
+                                matchScore = 0.9;
+                                break;
+                            }
+                        }
+                        
+                        // 组合匹配
+                        for (const prefix of pattern.prefixes) {
                             for (const suffix of pattern.suffixes) {
-                                if (text === keyword + suffix) {
-                                    matchScore = 0.9;
+                                if (text === prefix + keyword + suffix) {
+                                    matchScore = 0.95;
                                     break;
                                 }
                             }
                         }
-                        
-                        // 其他包含情况
-                        if (matchScore === 0) {
-                            matchScore = 0.7;
-                        }
+                    } else {
+                        // 长文本的包含匹配（降低优先级）
+                        matchScore = 0.6;
                     }
                     
                     // 如果找到高分匹配，直接返回
                     if (matchScore >= 0.9) {
+                        console.log(`[CommandSystem] 方向匹配成功: ${keyword} -> ${direction} (分数: ${matchScore})`);
                         const command = this.getDirectionCommand(direction);
                         if (command && this.isContextMatch(command, context)) {
                             return {
                                 ...command,
-                                confidence: matchScore
+                                confidence: matchScore,
+                                matchedText: matchedKeyword
                             };
                         }
                     }

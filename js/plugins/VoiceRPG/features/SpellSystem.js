@@ -824,10 +824,14 @@ class SpellSystem {
             this.castingUI.updateMatches([]);
         }
         
+        // 添加准备时间，确保之前的文本完全清理
+        console.log('[SpellSystem] 准备阶段：清理残留文本...');
+        await this.prepareCastingInterface();
+        
         // 开始音量监测
         this.startVolumeAnalysis();
         
-        console.log('[SpellSystem] 开始咏唱，按ESC退出，空格重新输入');
+        console.log('[SpellSystem] 开始咏唱，按ESC退出，按两次空格重新输入');
         return true;
     }
     
@@ -1095,21 +1099,54 @@ class SpellSystem {
     }
     
     /**
-     * 重新开始输入（强化版）
+     * 准备咒语录入界面（确保文本完全清理）
      */
-    restartInput() {
-        if (!this.isCasting) return;
+    async prepareCastingInterface() {
+        console.log('[SpellSystem] 开始准备咒语录入界面...');
         
-        console.log('[SpellSystem] 强制重新开始输入');
-        
+        // 1. 完全清理所有文本状态
         this.castingText = '';
         this.pendingText = '';
         this.accumulatedText = '';
         this.lastProcessedText = '';
-        this.isListening = true;
         
-        this.maxVolume = 0;
-        this.averageVolume = 0;
+        // 2. 清理UI显示
+        if (this.castingUI) {
+            this.castingUI._castingText = '';
+            this.castingUI._matches = [];
+            this.castingUI.contents.clear();
+            this.castingUI.refresh();
+        }
+        
+        // 3. 强制重置语音识别状态
+        if (window.$voiceRPG && typeof window.$voiceRPG.resetRecognitionState === 'function') {
+            console.log('[SpellSystem] 重置语音识别状态...');
+            await window.$voiceRPG.resetRecognitionState();
+        }
+        
+        // 4. 清理语音识别提供商的内部状态
+        if (window.$voiceRPG && window.$voiceRPG.provider) {
+            const provider = window.$voiceRPG.provider;
+            if (provider.resetRecognitionState && typeof provider.resetRecognitionState === 'function') {
+                console.log('[SpellSystem] 重置语音识别提供商状态...');
+                await provider.resetRecognitionState();
+            }
+        }
+        
+        // 5. 清理调试器状态
+        if (window.$voiceDebugger && typeof window.$voiceDebugger.reset === 'function') {
+            window.$voiceDebugger.reset();
+        }
+        
+        // 6. 等待准备时间（0.5秒）
+        console.log('[SpellSystem] 等待准备时间...');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // 7. 再次确保状态清理
+        this.castingText = '';
+        this.pendingText = '';
+        this.accumulatedText = '';
+        this.lastProcessedText = '';
         
         if (this.castingUI) {
             this.castingUI._castingText = '';
@@ -1118,7 +1155,64 @@ class SpellSystem {
             this.castingUI.refresh();
         }
         
+        console.log('[SpellSystem] 咒语录入界面准备完成');
+    }
+
+    /**
+     * 重新开始输入（强化版）
+     */
+    restartInput() {
+        if (!this.isCasting) return;
+        
+        console.log('[SpellSystem] 强制重新开始输入');
+        
+        // 完全清理所有文本状态
+        this.castingText = '';
+        this.pendingText = '';
+        this.accumulatedText = '';
+        this.lastProcessedText = '';
+        this.isListening = true;
+        
+        // 清理音量状态
+        this.maxVolume = 0;
+        this.averageVolume = 0;
+        this.currentVolume = 0;
+        
+        // 清理UI状态
+        if (this.castingUI) {
+            this.castingUI._castingText = '';
+            this.castingUI._matches = [];
+            this.castingUI.contents.clear();
+            this.castingUI.refresh();
+        }
+        
+        // 重置静音计时器
         this.resetSilenceTimer();
+        
+        // 强制重置语音识别状态
+        if (window.$voiceRPG && typeof window.$voiceRPG.resetRecognitionState === 'function') {
+            console.log('[SpellSystem] 重置语音识别状态');
+            window.$voiceRPG.resetRecognitionState();
+        }
+        
+        // 清理语音识别提供商的内部状态
+        if (window.$voiceRPG && window.$voiceRPG.provider) {
+            const provider = window.$voiceRPG.provider;
+            if (provider.resetRecognitionState && typeof provider.resetRecognitionState === 'function') {
+                console.log('[SpellSystem] 重置语音识别提供商状态');
+                provider.resetRecognitionState();
+            }
+        }
+        
+        // 清理调试器状态
+        if (window.$voiceDebugger && typeof window.$voiceDebugger.reset === 'function') {
+            window.$voiceDebugger.reset();
+        }
+        
+        // 延迟一小段时间确保清理完成
+        setTimeout(() => {
+            console.log('[SpellSystem] 输入已完全清空，准备接收新输入');
+        }, 100);
         
         console.log('[SpellSystem] 输入已完全清空');
     }
@@ -2507,11 +2601,13 @@ class SpellSystem {
      */
     initializeActorSpells(actorId) {
         // 默认学会基础咒语
-        const basicSpells = ['fire_ball', 'normal_attack'];
+        const basicSpells = ['fire_ball', 'normal_attack', 'normal_heal'];
         this.learnSpells(actorId, basicSpells);
         
         console.log('[SpellSystem] 火球术是否已注册:', this.spells.has('fire_ball'));
         console.log('[SpellSystem] 火球术数据:', this.spells.get('fire_ball'));
+        console.log('[SpellSystem] 普通恢复是否已注册:', this.spells.has('normal_heal'));
+        console.log('[SpellSystem] 普通恢复数据:', this.spells.get('normal_heal'));
     }
     
     /**

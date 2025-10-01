@@ -106,6 +106,12 @@
             this.pendingRestart = false;
             this.consecutiveMatches = 0;
             
+            // 语音识别队列管理
+            this.recognitionQueue = [];
+            this.maxQueueSize = 5; // 最大队列大小
+            this.queueProcessTimer = null;
+            this.lastQueueProcessTime = 0;
+            
             // 部分结果处理
             this.partialBuffer = '';
             this.partialConfidence = 0;
@@ -192,9 +198,302 @@
         }
         
         /**
+         * 添加识别结果到队列
+         */
+        addToQueue(result) {
+            // 检查队列大小，如果超过限制则清理旧的结果
+            if (this.recognitionQueue.length >= this.maxQueueSize) {
+                const removed = this.recognitionQueue.shift();
+                console.log('[VoiceRPG] 队列已满，移除最旧的结果:', removed.text);
+            }
+            
+            // 添加新结果
+            this.recognitionQueue.push({
+                ...result,
+                queueTime: Date.now()
+            });
+            
+            console.log(`[VoiceRPG] 队列大小: ${this.recognitionQueue.length}/${this.maxQueueSize}`);
+            
+            // 启动队列处理
+            this.processQueue();
+        }
+        
+        /**
+         * 处理队列中的识别结果
+         */
+        processQueue() {
+            // 防止频繁处理
+            const now = Date.now();
+            if (now - this.lastQueueProcessTime < 100) {
+                return;
+            }
+            this.lastQueueProcessTime = now;
+            
+            // 清除之前的定时器
+            if (this.queueProcessTimer) {
+                clearTimeout(this.queueProcessTimer);
+            }
+            
+            // 延迟处理，避免频繁处理
+            this.queueProcessTimer = setTimeout(() => {
+                this.processQueueItems();
+            }, 50);
+        }
+        
+        /**
+         * 处理队列中的项目
+         */
+        processQueueItems() {
+            if (this.recognitionQueue.length === 0) {
+                return;
+            }
+            
+            // 处理最新的结果
+            const latestResult = this.recognitionQueue[this.recognitionQueue.length - 1];
+            this.recognitionQueue = []; // 清空队列
+            
+            // 处理结果
+            this.processSingleResult(latestResult);
+        }
+        
+        /**
+         * 保持游戏活跃状态
+         */
+        keepGameActive() {
+            // 确保游戏窗口保持焦点
+            if (window.focus && typeof window.focus === 'function') {
+                window.focus();
+            }
+            
+            // 如果游戏有活跃状态管理，确保游戏保持活跃
+            if (SceneManager && SceneManager.isActive) {
+                SceneManager.isActive = true;
+            }
+            
+            // 防止游戏暂停
+            if (Graphics && Graphics.isPlaying) {
+                Graphics.isPlaying = true;
+            }
+            
+            console.log('[VoiceRPG] 游戏活跃状态已保持');
+        }
+
+        /**
+         * 从长语音中提取短命令（智能截断 - 增强版）
+         */
+        extractShortCommand(text, maxLength) {
+            // 垃圾话检测关键词（如果包含这些词，很可能是垃圾话）
+            const garbageKeywords = [
+                '今天', '早上', '晚上', '昨天', '明天', '吃饭', '睡觉', '工作', '学习',
+                '包子', '面条', '米饭', '菜', '肉', '水果', '饮料', '水', '茶', '咖啡',
+                '天气', '下雨', '晴天', '阴天', '热', '冷', '温度', '风', '雪',
+                '朋友', '家人', '同事', '同学', '老师', '老板', '客户', '顾客',
+                '手机', '电脑', '电视', '电影', '音乐', '游戏', '小说', '新闻',
+                '医院', '学校', '公司', '商店', '银行', '超市', '餐厅', '公园',
+                '车', '房子', '衣服', '鞋子', '包', '书', '钱', '时间', '地方'
+            ];
+            
+            // 检查是否包含垃圾话关键词
+            const hasGarbageKeywords = garbageKeywords.some(keyword => text.includes(keyword));
+            
+            // 如果包含垃圾话关键词，需要更严格的判断
+            if (hasGarbageKeywords) {
+                console.log('[VoiceRPG] 检测到可能的垃圾话，进行严格过滤');
+                
+                // 只有在文本很短且以命令词结尾时才提取
+                if (text.length <= 6) {
+                    const shortCommands = ['上', '下', '左', '右', '确认', '取消', '确定', '是', '否', '好'];
+                    
+                    for (const command of shortCommands) {
+                        if (text.endsWith(command) && command.length <= maxLength) {
+                            console.log(`[VoiceRPG] 从垃圾话中提取到结尾命令: ${command}`);
+                            return command;
+                        }
+                    }
+                }
+                
+                // 如果文本较长且包含垃圾话，直接忽略
+                console.log('[VoiceRPG] 长垃圾话已忽略');
+                return null;
+            }
+            
+            // 常见的短命令关键词
+            const shortCommands = [
+                '上', '下', '左', '右', '确认', '取消', '确定', '是', '否', '好', '不好',
+                '进入', '退出', '开始', '结束', '暂停', '继续', '返回', '选择', '确定',
+                '攻击', '防御', '技能', '道具', '逃跑', '治疗', '魔法', '咒语'
+            ];
+            
+            // 1. 首先尝试匹配完整的关键词
+            for (const command of shortCommands) {
+                if (text.includes(command) && command.length <= maxLength) {
+                    // 检查是否是独立的命令（前后没有其他字符或只有空格）
+                    const index = text.indexOf(command);
+                    const before = text.substring(Math.max(0, index - 1), index);
+                    const after = text.substring(index + command.length, index + command.length + 1);
+                    
+                    // 如果前后都是空白字符或边界，认为是独立命令
+                    if ((before === '' || before === ' ' || before === '，' || before === '。') &&
+                        (after === '' || after === ' ' || after === '，' || after === '。')) {
+                        console.log(`[VoiceRPG] 找到独立命令: ${command}`);
+                        return command;
+                    }
+                }
+            }
+            
+            // 2. 检查是否是短语结尾的命令（如"我今天早上吃了包子然后向上"）
+            if (text.length > 6) {
+                const endingCommands = ['上', '下', '左', '右', '确认', '取消', '确定'];
+                
+                for (const command of endingCommands) {
+                    if (text.endsWith(command) && command.length <= maxLength) {
+                        // 检查前面是否有明显的停顿或连接词
+                        const beforeCommand = text.substring(text.length - command.length - 3, text.length - command.length);
+                        if (beforeCommand.includes('然后') || beforeCommand.includes('接着') || 
+                            beforeCommand.includes('最后') || beforeCommand.includes('现在')) {
+                            console.log(`[VoiceRPG] 找到结尾命令: ${command}`);
+                            return command;
+                        }
+                    }
+                }
+            }
+            
+            // 3. 如果没找到完整关键词，尝试截取前几个字符
+            if (text.length > 0) {
+                const truncated = text.substring(0, maxLength);
+                
+                // 检查截取的部分是否包含有效字符
+                if (/[\u4e00-\u9fa5a-zA-Z0-9]/.test(truncated)) {
+                    return truncated;
+                }
+            }
+            
+            // 4. 尝试从文本中间提取可能的命令
+            const middleStart = Math.floor(text.length / 2) - Math.floor(maxLength / 2);
+            const middleEnd = middleStart + maxLength;
+            const middleText = text.substring(Math.max(0, middleStart), middleEnd);
+            
+            if (/[\u4e00-\u9fa5a-zA-Z0-9]/.test(middleText)) {
+                return middleText;
+            }
+            
+            return null;
+        }
+
+        /**
+         * 检测对话框是否处于活跃状态
+         */
+        isDialogActive() {
+            // 检查是否有消息窗口且正在显示
+            if (SceneManager._scene && SceneManager._scene._messageWindow) {
+                const messageWindow = SceneManager._scene._messageWindow;
+                
+                // 检查消息窗口是否打开且不是关闭状态
+                if (messageWindow.isOpen() && !messageWindow.isClosing()) {
+                    return true;
+                }
+                
+                // 检查是否有待处理的消息
+                if ($gameMessage && $gameMessage.hasText()) {
+                    return true;
+                }
+            }
+            
+            // 检查是否有选择窗口活跃
+            if (SceneManager._scene && SceneManager._scene._messageWindow) {
+                const messageWindow = SceneManager._scene._messageWindow;
+                if (messageWindow.isAnySubWindowActive && messageWindow.isAnySubWindowActive()) {
+                    return true;
+                }
+            }
+            
+            // 检查是否有滚动文本窗口
+            if (SceneManager._scene && SceneManager._scene._scrollTextWindow) {
+                const scrollWindow = SceneManager._scene._scrollTextWindow;
+                if (scrollWindow.isOpen() && !scrollWindow.isClosing()) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        /**
+         * 处理单个识别结果
+         */
+        processSingleResult(result) {
+            const { text, confidence, isFinal } = result;
+            
+            const now = Date.now();
+    
+            // 如果极速模式下已经执行过部分结果，检查是否需要再次执行
+            if (this.config.turboMode && this.partialBuffer) {
+                const normalizedText = this.commandSystem.normalizeText(text);
+                const normalizedPartial = this.commandSystem.normalizeText(this.partialBuffer);
+                
+                if (normalizedText === normalizedPartial || 
+                    (normalizedText.includes(normalizedPartial) && (now - this.lastPartialTime) < 1000)) {
+                    console.log('[VoiceRPG] 最终结果与已执行的部分结果相同，跳过');
+                    this.scheduleRestart();
+                    return;
+                }
+            }
+
+            // 解析命令
+            const command = this.commandSystem.parseCommand(text);
+            if (command) {
+                const commandKey = `${command.action}`;
+                
+                // 检查冷却时间
+                if (this.commandCooldowns.has(commandKey)) {
+                    const lastTime = this.commandCooldowns.get(commandKey);
+                    if (now - lastTime < this.config.commandCooldown) {
+                        console.log('[VoiceRPG] 命令冷却中，跳过:', command.action);
+                        this.scheduleRestart();
+                        return;
+                    }
+                }
+                
+                // 执行命令
+                this.executeCommand(command, text);
+                
+                // 更新冷却时间
+                this.commandCooldowns.set(commandKey, now);
+                
+                // 更新统计
+                this.lastExecutedCommand = command.action;
+                this.lastExecutedTime = now;
+                this.consecutiveMatches++;
+                
+                // 更新调试器
+                if (this.debugger) {
+                    this.debugger.updateFinalResult(text, command.action);
+                }
+                
+                // 极速模式下立即重启
+                if (this.config.turboMode) {
+                    this.scheduleRestart();
+                }
+            } else {
+                console.log('[VoiceRPG] 未识别到有效命令:', text);
+                
+                // 更新调试器
+                if (this.debugger) {
+                    this.debugger.updateFinalResult(text);
+                }
+                
+                // 极速模式下也重启
+                if (this.config.turboMode) {
+                    this.scheduleRestart();
+                }
+            }
+        }
+
+        /**
          * 重置语音识别状态（供咒语系统调用）
          */
-        async resetRecognitionState() {
+        resetRecognitionState() {
             console.log('[VoiceRPG] 重置语音识别状态');
             
             // 清空部分结果缓存
@@ -206,12 +505,16 @@
             this.recentCommands.clear();
             this.partialResultTracking.clear();
             
-            // 如果有provider，调用其重置方法
-            if (this.provider && typeof this.provider.resetRecognitionState === 'function') {
-                console.log('[VoiceRPG] 调用provider重置方法');
-                await this.provider.resetRecognitionState();
-            } else if (this.provider && this.provider.recognition) {
-                // 兼容旧版本
+            // 清空队列
+            this.recognitionQueue = [];
+            if (this.queueProcessTimer) {
+                clearTimeout(this.queueProcessTimer);
+                this.queueProcessTimer = null;
+            }
+            
+            // 如果有provider，也清空其内部状态
+            if (this.provider && this.provider.recognition) {
+                // Web Speech API 会自动处理，但我们可以标记
                 console.log('[VoiceRPG] 语音识别器准备接收新输入');
             }
         }
@@ -526,54 +829,58 @@
                 return;
             }
             
-            // 额外保护：如果刚进入战斗场景，延迟一下再处理命令
-            if ($gameParty && $gameParty.inBattle() && !window.$spellSystem) {
-                console.log('[VoiceRPG] 刚进入战斗场景，延迟处理命令');
-                setTimeout(() => {
-                    this.processCommand(text, false);
-                }, 100);
-                return;
-            }
-
-            const now = Date.now();
-    
-            // 如果极速模式下已经执行过部分结果，检查是否需要再次执行
-            if (this.config.turboMode && this.partialBuffer) {
-                const normalizedText = this.commandSystem.normalizeText(text);
-                const normalizedPartial = this.commandSystem.normalizeText(this.partialBuffer);
+            // 非战斗界面的长语音文本量限制
+            if (!$gameParty || !$gameParty.inBattle()) {
+                const cleanText = text.trim().replace(/\s+/g, '').replace(/[，。！？、]/g, '');
+                const maxLength = 25; // 设置最大字符数为25
                 
-                if (normalizedText === normalizedPartial || 
-                    (normalizedText.includes(normalizedPartial) && (now - this.lastPartialTime) < 1000)) {
-                    console.log('[VoiceRPG] 最终结果与已执行的部分结果相同，跳过');
-                    this.scheduleRestart();
-                    return;
-                }
-            }
-
-            // 解析命令
-            const command = this.commandSystem.parseCommand(text);
-            if (command) {
-                const commandKey = `${command.action}_${command.normalizedText || text}`;
-                const lastExecutionTime = this.recentCommands.get(commandKey);
-                
-                const dedupeWindow = ['up', 'down', 'left', 'right'].includes(command.action) 
-                    ? this.directionDedupeWindow 
-                    : this.commandDedupeWindow;
-                
-                if (lastExecutionTime && (now - lastExecutionTime) < dedupeWindow) {
-                    console.log('[VoiceRPG] 最终结果：跳过重复命令，间隔:', now - lastExecutionTime, 'ms');
-                    this.scheduleRestart();
-                    return;
+                if (cleanText.length > maxLength) {
+                    console.log(`[VoiceRPG] 检测到长语音文本(${cleanText.length}字符)，超过限制(${maxLength}字符)，自动清理`);
+                    
+                    // 只保留前25个字符
+                    const truncatedText = cleanText.substring(0, maxLength);
+                    console.log(`[VoiceRPG] 截取后的文本: ${truncatedText}`);
+                    
+                    // 更新result对象
+                    result.text = truncatedText;
+                    
+                    if (this.debugger) {
+                        this.debugger.updateFinalResult(`长语音已截取: ${truncatedText}`);
+                    }
                 }
             }
             
-            // 执行命令
-            this.processCommand(text, false);
-            
-            // 根据策略决定是否快速重启
-            if (this.config.turboMode) {
-                this.scheduleRestart();
+            // 对话框存在检测（优化版）
+            if (this.isDialogActive()) {
+                const cleanText = text.trim().replace(/\s+/g, '').replace(/[，。！？、]/g, '');
+                const maxDialogLength = 10; // 对话框存在时只允许短语音命令
+                
+                if (cleanText.length > maxDialogLength) {
+                    console.log(`[VoiceRPG] 对话框存在，检测到长语音文本(${cleanText.length}字符)，超过限制(${maxDialogLength}字符)，智能截断`);
+                    
+                    // 智能截断：尝试提取可能的短命令
+                    const shortCommand = this.extractShortCommand(cleanText, maxDialogLength);
+                    
+                    if (shortCommand) {
+                        console.log(`[VoiceRPG] 从长语音中提取到短命令: ${shortCommand}`);
+                        result.text = shortCommand; // 更新为截断后的文本
+                        
+                        if (this.debugger) {
+                            this.debugger.updateFinalResult(`对话框长语音已截断: ${shortCommand}`);
+                        }
+                    } else {
+                        console.log(`[VoiceRPG] 无法从长语音中提取有效命令，完全忽略`);
+                        
+                        if (this.debugger) {
+                            this.debugger.updateFinalResult(`对话框长语音已忽略: ${cleanText.substring(0, 20)}...`);
+                        }
+                        return; // 直接返回，不处理
+                    }
+                }
             }
+            
+            // 队列管理：防止网络丢包时囤积过多未识别语音
+            this.addToQueue(result);
         }
 
         /**
@@ -904,7 +1211,7 @@
         }
         
         /**
-         * 处理状态变化
+         * 处理状态变化（修复版 - 同时更新服务状态）
          */
         handleStatusChange(status) {
             if (this.debugger) {
@@ -919,6 +1226,17 @@
                 
                 const statusInfo = statusMap[status] || { text: status, color: '#999' };
                 this.debugger.updateRecognitionStatus(statusInfo.text, statusInfo.color);
+                
+                // 同时更新服务状态，避免状态卡住
+                if (status === 'listening' || status === 'processing') {
+                    this.debugger.updateServiceStatus('已连接 - 正常', '#4CAF50');
+                } else if (status === 'error' || status === 'stopped') {
+                    this.debugger.updateServiceStatus('连接异常', '#F44336');
+                } else if (status === 'connecting') {
+                    this.debugger.updateServiceStatus('连接中', '#2196F3');
+                } else if (status === 'no-speech') {
+                    this.debugger.updateServiceStatus('已连接 - 等待语音', '#FF9800');
+                }
             }
         }
         

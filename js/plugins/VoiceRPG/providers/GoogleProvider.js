@@ -39,6 +39,12 @@ class GoogleProvider extends BaseProvider {
         // === 新增：重启控制 ===
         this.lastRestartTime = 0;
         this.minRestartInterval = 100; // 最小重启间隔
+        
+        // === 新增：超时检测 ===
+        this.lastActivityTime = 0;
+        this.timeoutTimer = null;
+        this.maxInactivityTime = 30000; // 30秒无活动自动重启
+        this.recognitionStartTime = 0;
     }
     
     /**
@@ -112,6 +118,14 @@ class GoogleProvider extends BaseProvider {
                 this.recognition.lang = this.lockedLanguage;
             }
         }, checkInterval);
+        
+        // 额外保护：在每次识别开始时强制设置语言
+        const originalStart = this.recognition.start;
+        this.recognition.start = () => {
+            this.recognition.lang = this.lockedLanguage;
+            console.log('[Google] 强制设置识别语言为:', this.lockedLanguage);
+            return originalStart.call(this.recognition);
+        };
     }
     
     /**
@@ -132,7 +146,12 @@ class GoogleProvider extends BaseProvider {
             this.clearTimers();
             this.updateStatus('listening');
             this.lastSpeechTime = Date.now();
+            this.lastActivityTime = Date.now();
+            this.recognitionStartTime = Date.now();
             this.needsClear = false;
+            
+            // 启动超时检测
+            this.startTimeoutDetection();
         };
         
         // 识别结果 - 极速处理
@@ -153,6 +172,7 @@ class GoogleProvider extends BaseProvider {
             
             // 更新最后语音时间
             this.lastSpeechTime = Date.now();
+            this.lastActivityTime = Date.now();
             
             // 重置计时器
             this.resetNoSpeechTimer();
@@ -526,6 +546,9 @@ class GoogleProvider extends BaseProvider {
             clearTimeout(this.silenceTimer);
             this.silenceTimer = null;
         }
+        
+        // 清除超时定时器
+        this.clearTimeoutTimer();
     }
     
     /**
@@ -592,6 +615,70 @@ class GoogleProvider extends BaseProvider {
         }
     }
     
+    /**
+     * 启动超时检测
+     */
+    startTimeoutDetection() {
+        this.clearTimeoutTimer();
+        
+        this.timeoutTimer = setInterval(() => {
+            const now = Date.now();
+            const timeSinceActivity = now - this.lastActivityTime;
+            const timeSinceStart = now - this.recognitionStartTime;
+            
+            // 检查是否超过最大无活动时间
+            if (timeSinceActivity > this.maxInactivityTime) {
+                console.warn('[Google] 检测到长时间无活动，自动重启语音识别');
+                this.handleTimeout();
+                return;
+            }
+            
+            // 检查是否超过最大运行时间（防止卡死）
+            if (timeSinceStart > this.maxInactivityTime * 2) {
+                console.warn('[Google] 检测到长时间运行，自动重启语音识别');
+                this.handleTimeout();
+                return;
+            }
+        }, 5000); // 每5秒检查一次
+    }
+    
+    /**
+     * 处理超时
+     */
+    handleTimeout() {
+        console.log('[Google] 处理超时，重启语音识别');
+        this.clearTimeoutTimer();
+        
+        // 停止当前识别
+        if (this.recognition && this.isActive) {
+            try {
+                this.recognition.stop();
+            } catch (e) {
+                console.warn('[Google] 停止识别时出错:', e);
+            }
+        }
+        
+        // 延迟重启
+        setTimeout(() => {
+            if (this.isActive) {
+                this.doStart().catch(error => {
+                    console.error('[Google] 超时重启失败:', error);
+                    this.handleError(error);
+                });
+            }
+        }, 1000);
+    }
+    
+    /**
+     * 清除超时定时器
+     */
+    clearTimeoutTimer() {
+        if (this.timeoutTimer) {
+            clearInterval(this.timeoutTimer);
+            this.timeoutTimer = null;
+        }
+    }
+
     /**
      * 设置语言（会被锁定）
      */

@@ -144,10 +144,16 @@ class Window_SpellCasting extends Window_Base {
         this.drawText(tips1, 0, footerY, this.innerWidth, 'center');
         
         // 第二行提示（突出显示）
-        this.contents.fontSize = 18;
+        this.contents.fontSize = 20;
         this.changeTextColor(ColorManager.powerUpColor());
-        const tips2 = '按 ESC 退出咏唱 | 按 空格 重新录制';
+        const tips2 = '按 ESC 退出咏唱 | 按 两次空格 重新录制';
         this.drawText(tips2, 0, footerY + 22, this.innerWidth, 'center');
+        
+        // 第三行提示（更明显的说明）
+        this.contents.fontSize = 16;
+        this.changeTextColor(ColorManager.textColor());
+        const tips3 = '※ 如果识别错误，请按两次空格键清除后重新录制';
+        this.drawText(tips3, 0, footerY + 45, this.innerWidth, 'center');
     }
     
     drawActorInfo(x, y) {

@@ -31,21 +31,29 @@
  * @default 0
  *
  * @help
- * 在“装备”的备注里写：
+ * 在"装备"的备注里写：
  *   <ActionSE>
  * 或
- *   <ActionSE: 名称, 音量, 音调, 声像>
+ *   <ActionSE: 名称, 音量, 音调, 声像, 提示文本>
  *
  * 示例：
  *   <ActionSE>
  *   <ActionSE: Dang, 90, 100, 0>
+ *   <ActionSE: Dang, 90, 100, 0, 装备发出清脆的响声！>
+ *   <ActionSE: Bell1, 80, 120, -20, 神圣装备的力量在共鸣！>
  *
- * 触发时机：该装备在身的“我方角色”每次行动结束（普攻/技能）
+ * 触发时机：该装备在身的"我方角色"每次行动结束（普攻/技能）
  * 不需要额外插件，兼容原版战斗流程。
+ *
+ * 新增功能：
+ * - 支持自定义提示文本，在战斗日志中显示
+ * - 格式：<ActionSE: 音效名, 音量, 音调, 声像, 提示文本>
+ * - 如果省略提示文本，则不显示文本提示
  *
  * 制作提示：
  * - 请把对应的SE放到 audio/se/ 下（如 Dang.ogg / Dang.m4a）。
  * - 如果备注里没写数值，则使用插件参数的默认值。
+ * - 提示文本支持颜色代码，如：\\C[2]绿色文本\\C[0]
  *
  * 版权：可随意商用/改写，署名可选。
  */
@@ -60,13 +68,19 @@
   const DEF_PAN    = Number(parameters["DefaultPan"] || 0);
 
   function parseActionSeNote(note) {
-    // 匹配 <ActionSE> 或 <ActionSE: name, vol, pitch, pan>
+    // 匹配 <ActionSE> 或 <ActionSE: name, vol, pitch, pan, message>
     const tag = /<ActionSE(?::\s*([^>]+))?>/i.exec(note || "");
     if (!tag) return null;
 
     if (!tag[1]) {
       // 只写了 <ActionSE>
-      return { name: DEF_NAME, volume: DEF_VOLUME, pitch: DEF_PITCH, pan: DEF_PAN };
+      return { 
+        name: DEF_NAME, 
+        volume: DEF_VOLUME, 
+        pitch: DEF_PITCH, 
+        pan: DEF_PAN,
+        message: "装备音效触发！"
+      };
     }
 
     const parts = tag[1].split(",").map(s => s.trim());
@@ -74,8 +88,9 @@
     const volume = parts[1] !== undefined ? Number(parts[1]) || DEF_VOLUME : DEF_VOLUME;
     const pitch  = parts[2] !== undefined ? Number(parts[2]) || DEF_PITCH  : DEF_PITCH;
     const pan    = parts[3] !== undefined ? Number(parts[3]) || DEF_PAN    : DEF_PAN;
+    const message = parts[4] !== undefined ? parts[4] : "装备音效触发！";
 
-    return { name, volume, pitch, pan };
+    return { name, volume, pitch, pan, message };
   }
 
   function actorHasActionSeEquip(actor) {
@@ -97,12 +112,21 @@
       const subject = this._subject;
       const se = actorHasActionSeEquip(subject);
       if (se) {
+        // 播放音效
         AudioManager.playSe({
           name: se.name,
           volume: se.volume,
           pitch: se.pitch,
           pan: se.pan
         });
+        
+        // 显示文本提示
+        if (se.message && se.message !== "装备音效触发！") {
+          const scene = SceneManager._scene;
+          if (scene && scene._logWindow) {
+            scene._logWindow.push("addText", `\\C[6]${subject.name()}\\C[0]：\\C[3]${se.message}\\C[0]`);
+          }
+        }
       }
     } catch (e) {
       console.error(PLUGIN_NAME, e);

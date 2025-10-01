@@ -166,18 +166,34 @@
         const actorId = Number(args.actorId) || 1;
         const spellId = args.spellId || 'fire_ball';
         
-        if (window.$spellSystem && window.$spellSystem.learnedSpells.has(actorId)) {
-            window.$spellSystem.learnedSpells.get(actorId).delete(spellId);
-            
-            // 更新角色数据
-            const actor = $gameActors.actor(actorId);
-            if (actor) {
-                actor._learnedSpells = Array.from(window.$spellSystem.learnedSpells.get(actorId));
-            }
-            
-            const spell = window.$spellSystem.spells.get(spellId);
-            if (actor && spell) {
-                $gameMessage.add(`\\C[3]${actor.name()}\\C[0]忘记了\\C[2]${spell.name}\\C[0]！`);
+        if (window.$spellSystem) {
+            // 使用SpellSystem的方法来忘记咒语
+            if (window.$spellSystem.learnedSpells.has(actorId)) {
+                window.$spellSystem.learnedSpells.get(actorId).delete(spellId);
+                
+                // 更新角色数据
+                const actor = $gameActors.actor(actorId);
+                if (actor) {
+                    actor._learnedSpells = Array.from(window.$spellSystem.learnedSpells.get(actorId));
+                }
+                
+                const spell = window.$spellSystem.spells.get(spellId);
+                if (actor && spell) {
+                    $gameMessage.add(`\\C[3]${actor.name()}\\C[0]忘记了\\C[2]${spell.name}\\C[0]！`);
+                }
+            } else {
+                // 如果角色没有学习记录，尝试从角色数据中移除
+                const actor = $gameActors.actor(actorId);
+                if (actor && actor._learnedSpells) {
+                    const index = actor._learnedSpells.indexOf(spellId);
+                    if (index > -1) {
+                        actor._learnedSpells.splice(index, 1);
+                        const spell = window.$spellSystem.spells.get(spellId);
+                        if (spell) {
+                            $gameMessage.add(`\\C[3]${actor.name()}\\C[0]忘记了\\C[2]${spell.name}\\C[0]！`);
+                        }
+                    }
+                }
             }
         }
     });
@@ -204,7 +220,11 @@
                 // 为所有角色初始化基础咒语
                 for (let i = 1; i <= $dataActors.length - 1; i++) {
                     if ($dataActors[i]) {
-                        window.$spellSystem.initializeActorSpells(i);
+                        // 确保角色有学习记录
+                        if (!window.$spellSystem.learnedSpells.has(i)) {
+                            window.$spellSystem.learnedSpells.set(i, new Set());
+                        }
+                        console.log(`[SpellLearning] 角色${i}咒语记录已初始化`);
                     }
                 }
                 console.log('[SpellLearning] 角色咒语初始化完成');

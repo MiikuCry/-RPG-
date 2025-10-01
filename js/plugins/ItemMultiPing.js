@@ -75,10 +75,25 @@
     if (!(scene instanceof Scene_Battle)) return;
     const delayMs = Math.max(0, DELAY_FRAMES) * FRAME_MS;
 
+    // 统计攻击目标
+    const attackStats = new Map(); // target -> count
+    const allyStats = new Map();   // ally -> count
+    const enemyStats = new Map();  // enemy -> count
+
     for (let i = 0; i < hits; i++) {
       setTimeout(() => {
         const t = randomTargetBiased();
         if (!t) return;
+        
+        // 记录攻击统计
+        attackStats.set(t, (attackStats.get(t) || 0) + 1);
+        
+        if (t.isActor()) {
+          allyStats.set(t, (allyStats.get(t) || 0) + 1);
+        } else {
+          enemyStats.set(t, (enemyStats.get(t) || 0) + 1);
+        }
+        
         t.gainHp(-dmg);
         t.startDamagePopup();
         t.performDamage();
@@ -86,7 +101,55 @@
 
         scene._statusWindow?.refresh();
         scene._enemyWindow?.refresh?.();
+        
+        // 在最后一击后显示统计信息
+        if (i === hits - 1) {
+          setTimeout(() => {
+            showAttackSummary(attackStats, allyStats, enemyStats, dmg);
+          }, delayMs + 100);
+        }
       }, i * delayMs);
+    }
+  }
+
+  function showAttackSummary(attackStats, allyStats, enemyStats, dmg) {
+    const messages = [];
+    
+    // 统计我方攻击
+    if (allyStats.size > 0) {
+      const allyNames = [];
+      for (const [ally, count] of allyStats) {
+        if (count > 0) {
+          allyNames.push(`${ally.name()}(${count}次)`);
+        }
+      }
+      if (allyNames.length > 0) {
+        messages.push(`\\C[7]【警告】【昔日游侠】赫拉芬分别对${allyNames.join('、')}造成了攻击！\\C[0]`);
+        messages.push(`\\C[7]对自己造成了${Array.from(allyStats.values()).reduce((a, b) => a + b, 0)}次攻击！\\C[0]`);
+      }
+    }
+    
+    // 统计敌方攻击
+    if (enemyStats.size > 0) {
+      const enemyNames = [];
+      for (const [enemy, count] of enemyStats) {
+        if (count > 0) {
+          enemyNames.push(`${enemy.name()}(${count}次)`);
+        }
+      }
+      if (enemyNames.length > 0) {
+        messages.push(`\\C[2]【昔日游侠】赫拉芬分别对${enemyNames.join('、')}造成了攻击！\\C[0]`);
+      }
+    }
+    
+    // 显示消息
+    if (messages.length > 0) {
+      const scene = SceneManager._scene;
+      if (scene && scene._logWindow) {
+        messages.forEach(msg => {
+          scene._logWindow.push("addText", msg);
+        });
+      }
     }
   }
 
