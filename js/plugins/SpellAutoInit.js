@@ -77,25 +77,7 @@
         };
     }
     
-    // 读取存档时恢复咒语数据
-    const _Scene_Load_onLoadSuccess = Scene_Load.prototype.onLoadSuccess;
-    Scene_Load.prototype.onLoadSuccess = function() {
-        _Scene_Load_onLoadSuccess.call(this);
-        
-        // 恢复咒语学习数据
-        setTimeout(() => {
-            if (window.$spellSystem) {
-                $gameParty.allMembers().forEach(actor => {
-                    if (actor._learnedSpells) {
-                        window.$spellSystem.learnedSpells.set(
-                            actor.actorId(),
-                            new Set(actor._learnedSpells)
-                        );
-                    }
-                });
-                console.log('[SpellAutoInit] 咒语数据已恢复');
-            }
-        }, 100);
-    };
+    // 注意：咒语学习数据的恢复由SpellSystem.js统一处理
+    // 这里不再重复实现，避免数据冲突
     
 })();

@@ -212,37 +212,7 @@
         }, 1000);
     };
     
-    // 保存和加载咒语学习数据
-    const _DataManager_makeSaveContents = DataManager.makeSaveContents;
-    DataManager.makeSaveContents = function() {
-        const contents = _DataManager_makeSaveContents.call(this);
-        
-        if (window.$spellSystem) {
-            // 保存学习的咒语数据
-            contents.learnedSpells = {};
-            window.$spellSystem.learnedSpells.forEach((spells, actorId) => {
-                contents.learnedSpells[actorId] = Array.from(spells);
-            });
-        }
-        
-        return contents;
-    };
-    
-    const _DataManager_extractSaveContents = DataManager.extractSaveContents;
-    DataManager.extractSaveContents = function(contents) {
-        _DataManager_extractSaveContents.call(this, contents);
-        
-        if (window.$spellSystem && contents.learnedSpells) {
-            // 恢复学习的咒语数据
-            window.$spellSystem.learnedSpells.clear();
-            
-            for (const actorId in contents.learnedSpells) {
-                window.$spellSystem.learnedSpells.set(
-                    Number(actorId), 
-                    new Set(contents.learnedSpells[actorId])
-                );
-            }
-        }
-    };
+    // 注意：咒语学习数据的保存和加载由SpellSystem.js统一处理
+    // 这里不再重复实现，避免数据冲突
     
 })();

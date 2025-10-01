@@ -1,6 +1,4 @@
 [
 null,
-{"id":1,"battlerName":"Actor1_1","characterIndex":0,"characterName":"主角_黑发","classId":10,"equips":[0,0,0,0,0],"faceIndex":0,"faceName":"表情图","traits":[],"initialLevel":99,"maxLevel":99,"name":"主角","nickname":"","note":"","profile":""},
-{"id":2,"battlerName":"","characterIndex":0,"characterName":"主角_光头","classId":10,"equips":[0,0,0,0,0],"faceIndex":1,"faceName":"表情图","traits":[],"initialLevel":99,"maxLevel":99,"name":"主角","nickname":"","note":"","profile":""},
-{"id":3,"battlerName":"","characterIndex":0,"characterName":"主角_金发","classId":10,"equips":[0,0,0,0,0],"faceIndex":2,"faceName":"表情图","traits":[],"initialLevel":99,"maxLevel":99,"name":"主角","nickname":"","note":"","profile":""}
+{"id":1,"battlerName":"Actor1_1","characterIndex":0,"characterName":"主角_黑发","classId":10,"equips":[0,0,0,0,0],"faceIndex":0,"faceName":"表情图","traits":[],"initialLevel":99,"maxLevel":99,"name":"主角","nickname":"","note":"","profile":""}
 ]

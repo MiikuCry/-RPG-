@@ -40,7 +40,7 @@ class SpellSystem {
         
         // 配置
         this.config = {
-            minAccuracy: 0.3,
+            minAccuracy: 0.35, // 提高匹配阈值到35%
             maxDamageMultiplier: 2.0,
             volumeWeight: 0.3,
             accuracyWeight: 0.7,
@@ -366,9 +366,42 @@ class SpellSystem {
     }
     
     /**
+     * 清理未使用的咒语（只保留默认咒语）
+     */
+    clearUnusedSpells() {
+        console.log('[SpellSystem] 清理未使用的咒语');
+        
+        // 定义当前使用的默认咒语ID列表
+        const defaultSpellIds = [
+            'normal_attack', 'fire_ball', 'dragon_roar', 'evil_eye', 'destiny_draw',
+            'soredowa_dokana', 'laser_eye', 'serious_punch', 'normal_defense',
+            'normal_heal', 'dragon_sword', 'thunder_god', 'konami_code',
+            'ultimate_magic', 'excalibur'
+        ];
+        
+        // 清理不在默认列表中的咒语
+        const spellsToRemove = [];
+        for (const [id, spell] of this.spells) {
+            if (!defaultSpellIds.includes(id)) {
+                spellsToRemove.push(id);
+            }
+        }
+        
+        // 删除未使用的咒语
+        for (const id of spellsToRemove) {
+            this.spells.delete(id);
+            console.log(`[SpellSystem] 已删除未使用的咒语: ${id}`);
+        }
+        
+        console.log(`[SpellSystem] 清理完成，删除了 ${spellsToRemove.length} 个未使用的咒语`);
+    }
+    
+    /**
      * 技能槽 - 初始化默认咒语
      */
     initializeDefaultSpells() {
+        // 先清理未使用的咒语
+        this.clearUnusedSpells();
         // 普通攻击
         this.registerSpell('normal_attack', {
             name: '普通攻击',
@@ -404,7 +437,7 @@ class SpellSystem {
             element: 'none',
             basePower: 50,
             powerMultiplier: 1.0,
-            mpCost: 15,
+            mpCost: 3,
             description: '完全依赖音量的技能，上限极高下限极低',
             difficulty: 2,
             effects: ['damage'],
@@ -501,7 +534,7 @@ class SpellSystem {
             difficulty: 1,
             effects: ['defense_buff'],
             isNoDamage: true,
-            defenseStateId: 18,
+            defenseStateId: 37,  // 女神的加护
             cooldown: 3,
             shameFactor: 0.8
         });
@@ -553,8 +586,8 @@ class SpellSystem {
             fixedBonus: 5,
             paralysisChance: 0.2,
             burnChance: 0.2,
-            paralysisStateId: 6,
-            burnStateId: 10,
+            paralysisStateId: 44,  // 雷公助我专用麻痹状态
+            burnStateId: 45,       // 雷公助我专用灼烧状态
             shameFactor: 1.8
         });
         
@@ -570,8 +603,8 @@ class SpellSystem {
             difficulty: 2,
             effects: ['konami_revive'],
             isNoDamage: true,
-            reviveStateId: 19,
-            penaltyStateId: 20,
+            reviveStateId: 46,  // 不死秘籍复活状态
+            penaltyStateId: 47, // 秘籍惩罚状态
             shameFactor: 2.5
         });
         
@@ -588,7 +621,7 @@ class SpellSystem {
             effects: ['ultimate_magic_damage'],
             isPhysical: false,
             shameFactor: 3.0,
-            exhaustStateId: 21,
+            exhaustStateId: 48,  // 力竭状态
             usedFlag: 'ultimate_magic_used'
         });
         
@@ -831,11 +864,20 @@ class SpellSystem {
             return;
         }
         
-        // 过滤掉常见的非咒语命令
-        const nonSpellCommands = ['互动', '确认', '确定', '是', '好', '进入', '选择', 'OK', '上', '下', '左', '右', '取消', '返回'];
+        // 过滤掉常见的非咒语命令（包括"互动"）
+        const nonSpellCommands = ['互动', '确认', '确定', '是', '好', '进入', '选择', 'OK', '上', '下', '左', '右', '取消', '返回', '开始', '结束', '暂停', '继续'];
         if (nonSpellCommands.includes(cleanText)) {
             console.log('[SpellSystem] 检测到非咒语命令，忽略:', cleanText);
             return;
+        }
+        
+        // 额外检查：如果输入包含"互动"等关键词，也过滤掉
+        const nonSpellKeywords = ['互动', '确认', '确定', '选择', '进入', '开始', '结束'];
+        for (const keyword of nonSpellKeywords) {
+            if (cleanText.includes(keyword)) {
+                console.log('[SpellSystem] 检测到包含非咒语关键词，忽略:', cleanText, '关键词:', keyword);
+                return;
+            }
         }
         
         console.log('[SpellSystem] 原始输入:', text);
@@ -1118,7 +1160,14 @@ class SpellSystem {
                 isAlternative = true;
             }
             
+            // 更严格的匹配条件
             if (accuracy >= this.config.minAccuracy && accuracy > bestAccuracy) {
+                // 额外检查：如果相似度太低，即使超过阈值也拒绝
+                if (accuracy < 0.4) {
+                    console.log(`[SpellSystem] 相似度过低，拒绝匹配: ${spell.name}, 准确度: ${accuracy}`);
+                    continue;
+                }
+                
                 bestAccuracy = accuracy;
                 bestMatch = {
                     spell: spell,
@@ -1156,31 +1205,37 @@ class SpellSystem {
             }
         }
         
+        // 对于短咒语，需要更严格的匹配
         if (target.length <= 4) {
+            // 完全包含匹配，给予较高分数
             if (spokenNorm.includes(targetNorm) || targetNorm.includes(spokenNorm)) {
-                return 0.8;
+                return 0.85;
             }
             
-            if (targetNorm === '火球术' && (spokenNorm.includes('火') || spokenNorm.includes('球') || spokenNorm.includes('术'))) {
-                return 0.6;
+            // 特定咒语的宽松匹配（降低分数）
+            if (targetNorm === '火球术' && (spokenNorm.includes('火') && spokenNorm.includes('球'))) {
+                return 0.7;
             }
             
             if ((targetNorm === '普攻' || targetNorm === '普通攻击') && 
-                (spokenNorm.includes('普') || spokenNorm.includes('攻'))) {
-                return 0.6;
+                (spokenNorm.includes('普') && spokenNorm.includes('攻'))) {
+                return 0.7;
             }
             
+            // 字符匹配需要更严格的条件
             let matchCount = 0;
             for (let i = 0; i < targetNorm.length; i++) {
                 if (spokenNorm.includes(targetNorm[i])) {
                     matchCount++;
                 }
             }
-            if (matchCount >= 2) {
-                return 0.5;
+            // 需要匹配至少70%的字符
+            if (matchCount >= Math.ceil(targetNorm.length * 0.7)) {
+                return 0.6;
             }
         }
         
+        // 对于长咒语，使用更严格的相似度计算
         let maxSimilarity = this.calculateSimilarity(spokenNorm, targetNorm);
         
         for (const variant of phoneticVariants) {
@@ -1189,6 +1244,7 @@ class SpellSystem {
             maxSimilarity = Math.max(maxSimilarity, similarity);
         }
         
+        // 关键词匹配需要更严格
         const keywords = this.extractKeywords(targetNorm);
         let keywordMatch = 0;
         
@@ -1198,9 +1254,22 @@ class SpellSystem {
             }
         }
         
-        const keywordScore = keywords.length > 0 ? keywordMatch / keywords.length : 1;
+        const keywordScore = keywords.length > 0 ? keywordMatch / keywords.length : 0;
         
-        return maxSimilarity * 0.7 + keywordScore * 0.3;
+        // 对于长咒语，需要更高的相似度和关键词匹配
+        const finalScore = maxSimilarity * 0.8 + keywordScore * 0.2;
+        
+        // 如果相似度太低，直接返回0
+        if (maxSimilarity < 0.3) {
+            return 0;
+        }
+        
+        // 如果关键词匹配度太低，降低分数
+        if (keywordScore < 0.5 && keywords.length > 2) {
+            return finalScore * 0.5;
+        }
+        
+        return finalScore;
     }
 
     /**
@@ -1430,7 +1499,7 @@ class SpellSystem {
                 case 'laser_eye_fixed':
                     if (target) {
                         target.gainHp(-30);
-                        AudioManager.playSe({name: 'Laser1', volume: 90, pitch: 100});
+                        this.playSafeSe('Laser1', 90, 100);
                         this.addBattleMessage(`\\C[6]激光从${caster.name()}的眼中射出！\\C[0]`);
                     }
                     break;
@@ -1449,7 +1518,7 @@ class SpellSystem {
                         this.addBattleMessage(`\\C[2]下回合伤害减免90%！\\C[0]`);
                         this.addBattleMessage(`\\C[5]（提示：下回合使用登龙剑可获得连携加成）\\C[0]`);
                         
-                        AudioManager.playSe({name: 'Barrier', volume: 90, pitch: 100});
+                        this.playSafeSe('Barrier', 90, 100);
                         $gameScreen.startFlash([100, 200, 255, 128], 30);
                     }
                     break;
@@ -1462,7 +1531,7 @@ class SpellSystem {
                     this.addBattleMessage(`\\C[3]精灵的低语响起...\\C[0]`);
                     this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]恢复了\\C[2]${healAmount}\\C[0]点生命值！`);
                     
-                    AudioManager.playSe({name: 'Heal1', volume: 90, pitch: 100});
+                    this.playSafeSe('Heal1', 90, 100);
                     
                     if (caster.startDamagePopup) {
                         caster.startDamagePopup();
@@ -1488,7 +1557,7 @@ class SpellSystem {
                             caster.addState(spell.penaltyStateId);
                         }
                         
-                        AudioManager.playSe({name: 'Skill2', volume: 90, pitch: 80});
+                        this.playSafeSe('Skill2', 90, 80);
                         $gameScreen.startFlash([100, 255, 100, 150], 40);
                         
                         this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]输入了神秘的指令...`);
@@ -1618,7 +1687,7 @@ class SpellSystem {
             target.startDamagePopup();
         }
         
-        AudioManager.playSe({name: 'Thunder4', volume: 100, pitch: 100});
+        this.playSafeSe('Thunder4', 100, 100);
         $gameScreen.startFlash([255, 255, 100, 200], 30);
         
         this.addBattleMessage(`\\C[5]"苍天已死，黄天当立！"\\C[0]`);
@@ -1630,7 +1699,7 @@ class SpellSystem {
             if (spell.paralysisStateId && !target.isDead()) {
                 target.addState(spell.paralysisStateId);
                 this.addBattleMessage(`\\C[4]${target.name()}\\C[0]被雷电\\C[6]麻痹\\C[0]了！`);
-                AudioManager.playSe({name: 'Thunder1', volume: 80, pitch: 120});
+                this.playSafeSe('Thunder1', 80, 120);
             }
         }
         
@@ -1639,7 +1708,7 @@ class SpellSystem {
             if (spell.burnStateId && !target.isDead()) {
                 target.addState(spell.burnStateId);
                 this.addBattleMessage(`\\C[2]${target.name()}\\C[0]被雷火\\C[6]灼烧\\C[0]了！`);
-                AudioManager.playSe({name: 'Fire1', volume: 80, pitch: 110});
+                this.playSafeSe('Fire1', 80, 110);
             }
         }
         
@@ -1790,27 +1859,163 @@ class SpellSystem {
     }
 
     /**
-     * 天命抽取效果实现
+     * 天命抽取效果实现（塔罗牌版：根据概率抽取不同强度的效果）
      */
     executeDestinyDraw(caster, target) {
-        const beneficialStates = [14, 15, 16, 17];
-        const debuffStates = [2, 3, 4, 5, 6, 7];
-        const allStates = [...beneficialStates, ...debuffStates];
+        // 定义塔罗牌池和概率权重
+        const tarotCards = [
+            // 高概率 (40% 总概率)
+            { id: 56, name: '圣杯', type: 'beneficial', weight: 8, description: '生命值自动恢复10%' },
+            { id: 57, name: '宝剑', type: 'debuff', weight: 8, description: '双抗降低30%' },
+            { id: 58, name: '权杖', type: 'beneficial', weight: 8, description: '双攻提升30%' },
+            { id: 59, name: '金币', type: 'beneficial', weight: 8, description: '下回合10倍暴击率' },
+            { id: 60, name: '星星', type: 'beneficial', weight: 8, description: '下回合10倍敏捷' },
+            { id: 61, name: '月亮', type: 'debuff', weight: 8, description: '下回合命中率减半' },
+            
+            // 中概率 (35% 总概率)
+            { id: 63, name: '太阳', type: 'beneficial', weight: 7, description: '全属性提升20%' },
+            { id: 64, name: '正义', type: 'debuff', weight: 7, description: '1回合不能行动' },
+            { id: 65, name: '高塔', type: 'debuff', weight: 7, description: '最大生命值设为75%' },
+            { id: 66, name: '恶魔', type: 'mixed', weight: 7, description: '双攻200%，双防60%' },
+            { id: 67, name: '命运之轮', type: 'beneficial', weight: 7, description: '生命值恢复40%，法力值恢复30%' },
+            
+            // 低概率 (25% 总概率)
+            { id: 69, name: '死神', type: 'mixed', weight: 5, description: '最大生命值设为1%' },
+            { id: 70, name: '世界', type: 'debuff', weight: 5, description: '无法行动1-5回合' },
+            { id: 'fool', name: '愚者', type: 'debuff', weight: 5, description: '恢复全部生命值' },
+            { id: 'judgment', name: '审判', type: 'special', weight: 5, description: '双方均恢复至满血' }
+        ];
         
-        const shuffled = allStates.sort(() => Math.random() - 0.5);
-        const targetState = shuffled[0];
-        const casterState = shuffled[1];
+        // 根据权重随机选择塔罗牌
+        const selectedCard = this.weightedRandomSelect(tarotCards);
         
-        if (target && !target.isDead()) {
-            target.addState(targetState);
-            const stateName = $dataStates[targetState].name;
-            this.addBattleMessage(`\\C[5]${target.name()}\\C[0]获得了\\C[2]${stateName}\\C[0]状态！`);
+        this.addBattleMessage(`\\C[6]【天命抽取】\\C[0]塔罗牌显现：\\C[2]${selectedCard.name}\\C[0]！`);
+        this.addBattleMessage(`\\C[8]${selectedCard.description}\\C[0]`);
+        
+        // 根据卡牌类型分配效果
+        switch (selectedCard.type) {
+            case 'beneficial':
+                // 有益效果给施法者
+                this.applyTarotEffect(caster, selectedCard, true);
+                break;
+                
+            case 'debuff':
+                // 负面效果给目标
+                if (selectedCard.id === 'fool') {
+                    // 愚者特殊处理：给目标恢复生命值
+                    this.applySpecialTarotEffect(caster, target, selectedCard);
+                } else {
+                    this.applyTarotEffect(target, selectedCard, false);
+                }
+                break;
+                
+            case 'mixed':
+                // 混合效果需要特殊处理
+                this.applyMixedTarotEffect(caster, target, selectedCard);
+                break;
+                
+            case 'special':
+                // 特殊效果
+                this.applySpecialTarotEffect(caster, target, selectedCard);
+                break;
+        }
+    }
+    
+    /**
+     * 权重随机选择
+     */
+    weightedRandomSelect(items) {
+        const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+        let random = Math.random() * totalWeight;
+        
+        for (const item of items) {
+            random -= item.weight;
+            if (random <= 0) {
+                return item;
+            }
         }
         
-        if (caster && !caster.isDead()) {
-            caster.addState(casterState);
-            const stateName = $dataStates[casterState].name;
-            this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]获得了\\C[2]${stateName}\\C[0]状态！`);
+        return items[0]; // 备用选择
+    }
+    
+    /**
+     * 应用塔罗牌效果
+     */
+    applyTarotEffect(target, card, isBeneficial) {
+        if (!target || target.isDead()) return;
+        
+        if (typeof card.id === 'number') {
+            // 普通状态效果
+            target.addState(card.id);
+            const stateName = $dataStates[card.id].name;
+            const targetName = isBeneficial ? '施法者' : '目标';
+            this.addBattleMessage(`\\C[3]${target.name()}\\C[0]获得了\\C[2]${stateName}\\C[0]状态！`);
+        }
+    }
+    
+    /**
+     * 应用特殊塔罗牌效果
+     */
+    applySpecialTarotEffect(caster, target, card) {
+        switch (card.id) {
+            case 'fool':
+                // 愚者：给目标恢复全部生命值（惩罚牌）
+                if (target && !target.isDead()) {
+                    const healAmount = target.mhp - target.hp;
+                    target.gainHp(healAmount);
+                    this.addBattleMessage(`\\C[5]${target.name()}\\C[0]恢复了\\C[2]${healAmount}\\C[0]点生命值！`);
+                    this.addBattleMessage(`\\C[7]愚者的善意反而帮助了敌人...\\C[0]`);
+                }
+                break;
+                
+            case 'judgment':
+                // 审判：双方均恢复至满血
+                if (caster && !caster.isDead()) {
+                    const casterHeal = caster.mhp - caster.hp;
+                    caster.gainHp(casterHeal);
+                    this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]恢复了\\C[2]${casterHeal}\\C[0]点生命值！`);
+                }
+                if (target && !target.isDead()) {
+                    const targetHeal = target.mhp - target.hp;
+                    target.gainHp(targetHeal);
+                    this.addBattleMessage(`\\C[5]${target.name()}\\C[0]恢复了\\C[2]${targetHeal}\\C[0]点生命值！`);
+                }
+                break;
+        }
+    }
+    
+    /**
+     * 应用混合塔罗牌效果（需要特殊处理）
+     */
+    applyMixedTarotEffect(caster, target, card) {
+        switch (card.id) {
+            case 66: // 恶魔
+                // 双攻200%，双防60% - 给施法者
+                if (caster && !caster.isDead()) {
+                    caster.addState(card.id);
+                    this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]获得了\\C[2]恶魔之力\\C[0]！`);
+                    this.addBattleMessage(`\\C[6]攻击力翻倍，但防御力大幅下降！\\C[0]`);
+                }
+                break;
+                
+            case 69: // 死神 - 公平对赌
+                // 随机选择施法者或目标
+                const isCasterAffected = Math.random() < 0.5;
+                const affectedTarget = isCasterAffected ? caster : target;
+                const targetName = isCasterAffected ? '施法者' : '目标';
+                
+                if (affectedTarget && !affectedTarget.isDead()) {
+                    // 直接设置最大生命值为1%
+                    const newMaxHp = Math.max(1, Math.floor(affectedTarget.mhp * 0.01));
+                    affectedTarget._mhp = newMaxHp;
+                    if (affectedTarget.hp > newMaxHp) {
+                        affectedTarget._hp = newMaxHp;
+                    }
+                    
+                    this.addBattleMessage(`\\C[7]死神选择了\\C[2]${affectedTarget.name()}\\C[0]！`);
+                    this.addBattleMessage(`\\C[6]${affectedTarget.name()}\\C[0]的最大生命值被设为\\C[2]${newMaxHp}\\C[0]！`);
+                }
+                break;
         }
     }
 
@@ -1986,7 +2191,7 @@ class SpellSystem {
     executeSeriousPunch(caster, target) {
         console.log('[SpellSystem] 发动认真的一拳！');
         
-        AudioManager.playSe({name: 'Powerup', volume: 100, pitch: 80});
+        this.playSafeSe('Powerup', 100, 80);
         $gameScreen.startTint([-68, -68, -68, 68], 30);
         
         this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]：\\C[5]"这是...认真的一拳！"\\C[0]`);
@@ -1994,7 +2199,7 @@ class SpellSystem {
         
         setTimeout(() => {
             $gameScreen.startFlash([255, 255, 255, 255], 60);
-            AudioManager.playSe({name: 'Collapse4', volume: 100, pitch: 90});
+            this.playSafeSe('Collapse4', 100, 90);
             
             const enemies = $gameTroop.aliveMembers();
             
@@ -2517,6 +2722,27 @@ class SpellSystem {
     }
     
     /**
+     * 安全播放音效（使用RMMZ默认音效）
+     */
+    playSafeSe(name, volume = 90, pitch = 100) {
+        // 音效映射表：将自定义音效映射到RMMZ默认音效
+        const soundMap = {
+            'Laser1': 'Laser1',      // 激光音效
+            'Powerup': 'Powerup',    // 强化音效
+            'Collapse4': 'Collapse4', // 崩塌音效
+            'Barrier': 'Barrier',    // 屏障音效
+            'Heal1': 'Heal1',        // 治疗音效
+            'Thunder4': 'Thunder4',  // 雷电音效
+            'Thunder1': 'Thunder1',  // 雷电音效
+            'Fire1': 'Fire1',        // 火焰音效
+            'Skill2': 'Skill2'       // 技能音效
+        };
+        
+        const actualSound = soundMap[name] || 'Damage1';
+        AudioManager.playSe({name: actualSound, volume: volume, pitch: pitch});
+    }
+    
+    /**
      * 通用消息显示方法
      */
     addBattleMessage(message) {
@@ -2689,9 +2915,108 @@ class SpellSystem {
 // 创建全局实例
 window.$spellSystem = new SpellSystem();
 
+// 确保在页面加载完成后初始化
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        window.$spellSystem.initializeDefaultSpells();
+    });
+} else {
+    window.$spellSystem.initializeDefaultSpells();
+}
+
 // 导出
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = SpellSystem;
 } else {
     window.SpellSystem = SpellSystem;
 }
+
+// === 存档持久化：确保通过事件学会的咒语在存读档后仍然存在 ===
+(() => {
+    // 备份原函数
+    const _DM_makeSaveContents = DataManager.makeSaveContents;
+    const _DM_extractSaveContents = DataManager.extractSaveContents;
+
+    // 保存：把 $spellSystem.learnedSpells 序列化到存档
+    DataManager.makeSaveContents = function() {
+        const contents = _DM_makeSaveContents.call(this);
+        try {
+            if (window.$spellSystem && window.$spellSystem.learnedSpells) {
+                const serialized = {};
+                for (const [actorId, set] of window.$spellSystem.learnedSpells.entries()) {
+                    serialized[actorId] = Array.from(set);
+                }
+                contents._voiceRPG_spellSystem = contents._voiceRPG_spellSystem || {};
+                contents._voiceRPG_spellSystem.learnedSpells = serialized;
+            }
+        } catch (e) {
+            console.warn('[SpellSystem] 保存learnedSpells时出错:', e);
+        }
+        return contents;
+    };
+
+    // 读取：从存档恢复到 $spellSystem.learnedSpells，并同步到角色对象
+    DataManager.extractSaveContents = function(contents) {
+        _DM_extractSaveContents.call(this, contents);
+        try {
+            const payload = contents && contents._voiceRPG_spellSystem && contents._voiceRPG_spellSystem.learnedSpells;
+            if (window.$spellSystem && payload) {
+                const restored = new Map();
+                Object.keys(payload).forEach(key => {
+                    const actorId = Number(key);
+                    restored.set(actorId, new Set(payload[key] || []));
+                });
+                window.$spellSystem.learnedSpells = restored;
+
+                // 同步到角色实例，便于 hasLearnedSpell 的回退读取
+                if ($gameActors && typeof $gameActors.actor === 'function') {
+                    restored.forEach((set, actorId) => {
+                        const actor = $gameActors.actor(actorId);
+                        if (actor) {
+                            actor._learnedSpells = Array.from(set);
+                        }
+                    });
+                }
+                
+                console.log('[SpellSystem] 咒语学习数据已从存档恢复:', restored);
+            } else {
+                console.log('[SpellSystem] 存档中没有咒语学习数据，使用默认设置');
+            }
+        } catch (e) {
+            console.warn('[SpellSystem] 读取learnedSpells时出错:', e);
+        }
+    };
+    
+    // 页面刷新时的数据恢复
+    const _Scene_Boot_start = Scene_Boot.prototype.start;
+    Scene_Boot.prototype.start = function() {
+        _Scene_Boot_start.call(this);
+        
+        // 延迟恢复数据，确保所有系统都已初始化
+        setTimeout(() => {
+            if (window.$spellSystem && $gameSystem) {
+                // 检查是否有存档数据需要恢复
+                const saveData = DataManager.loadGame(DataManager.latestSavefileId());
+                if (saveData && saveData._voiceRPG_spellSystem && saveData._voiceRPG_spellSystem.learnedSpells) {
+                    console.log('[SpellSystem] 检测到存档数据，恢复咒语学习状态');
+                    const restored = new Map();
+                    Object.keys(saveData._voiceRPG_spellSystem.learnedSpells).forEach(key => {
+                        const actorId = Number(key);
+                        restored.set(actorId, new Set(saveData._voiceRPG_spellSystem.learnedSpells[key] || []));
+                    });
+                    window.$spellSystem.learnedSpells = restored;
+                    
+                    // 同步到角色实例
+                    if ($gameActors && typeof $gameActors.actor === 'function') {
+                        restored.forEach((set, actorId) => {
+                            const actor = $gameActors.actor(actorId);
+                            if (actor) {
+                                actor._learnedSpells = Array.from(set);
+                            }
+                        });
+                    }
+                }
+            }
+        }, 500);
+    };
+})();
