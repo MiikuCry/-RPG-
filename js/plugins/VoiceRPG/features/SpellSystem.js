@@ -435,15 +435,15 @@ class SpellSystem {
             name: '恶龙咆哮',
             incantation: '恶龙咆哮',
             element: 'none',
-            basePower: 50,
+            basePower: 80,
             powerMultiplier: 1.0,
             mpCost: 3,
-            description: '完全依赖音量的技能，上限极高下限极低',
+            description: '完全依赖音量的技能，普通伤害略低于普攻，但高音量时威力惊人',
             difficulty: 2,
             effects: ['damage'],
-            volumeMultiplier: 10.0,
+            volumeMultiplier: 15.0,
             minDamage: 1,
-            maxDamage: 500,
+            maxDamage: 999,
             isPhysical: false
         });
         
@@ -2437,31 +2437,34 @@ class SpellSystem {
     }
 
     /**
-     * 恶龙咆哮专用伤害计算
+     * 恶龙咆哮专用伤害计算（优化版）
      */
     calculateDragonRoarDamage(spell, volumeScore) {
         const mat = this.currentActor.mat;
         
-        let multiplier = 0.1;
+        // 新的音量倍率表：普通伤害略低于普攻，最高时达到雷公助我水平
+        let multiplier = 0.3; // 最低音量：30%基础伤害
         
         if (volumeScore < 0.2) {
-            multiplier = 0.1;
+            multiplier = 0.3;  // 很低音量：30%基础伤害
         } else if (volumeScore < 0.4) {
-            multiplier = 0.5;
+            multiplier = 0.6;  // 低音量：60%基础伤害
         } else if (volumeScore < 0.6) {
-            multiplier = 2;
+            multiplier = 1.0;  // 中等音量：100%基础伤害（略低于普攻的80%）
         } else if (volumeScore < 0.8) {
-            multiplier = 5;
+            multiplier = 1.5;  // 高音量：150%基础伤害
         } else if (volumeScore < 0.9) {
-            multiplier = 10;
+            multiplier = 2.2;  // 很高音量：220%基础伤害
         } else {
-            multiplier = 20;
+            multiplier = 3.0;  // 最高音量：300%基础伤害（达到雷公助我水平）
         }
         
+        // 基础伤害 = MAT × 0.8 × 音量倍率
         let damage = mat * (spell.basePower / 100) * multiplier;
         
+        // 确保最低伤害和最高伤害限制
         damage = Math.max(spell.minDamage || 1, damage);
-        damage = Math.min(spell.maxDamage || 9999, damage);
+        damage = Math.min(spell.maxDamage || 999, damage);
         
         return Math.floor(damage);
     }
