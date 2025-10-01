@@ -192,6 +192,31 @@
         }
         
         /**
+         * 重置语音识别状态（供咒语系统调用）
+         */
+        async resetRecognitionState() {
+            console.log('[VoiceRPG] 重置语音识别状态');
+            
+            // 清空部分结果缓存
+            this.partialBuffer = '';
+            this.partialConfidence = 0;
+            this.lastPartialTime = 0;
+            
+            // 清空去重记录
+            this.recentCommands.clear();
+            this.partialResultTracking.clear();
+            
+            // 如果有provider，调用其重置方法
+            if (this.provider && typeof this.provider.resetRecognitionState === 'function') {
+                console.log('[VoiceRPG] 调用provider重置方法');
+                await this.provider.resetRecognitionState();
+            } else if (this.provider && this.provider.recognition) {
+                // 兼容旧版本
+                console.log('[VoiceRPG] 语音识别器准备接收新输入');
+            }
+        }
+
+        /**
          * 注册战斗专用命令
          */
         registerBattleCommands() {
@@ -498,6 +523,15 @@
                 if (this.debugger) {
                     this.debugger.updateFinalResult(text + ' (咒语模式)');
                 }
+                return;
+            }
+            
+            // 额外保护：如果刚进入战斗场景，延迟一下再处理命令
+            if ($gameParty && $gameParty.inBattle() && !window.$spellSystem) {
+                console.log('[VoiceRPG] 刚进入战斗场景，延迟处理命令');
+                setTimeout(() => {
+                    this.processCommand(text, false);
+                }, 100);
                 return;
             }
 

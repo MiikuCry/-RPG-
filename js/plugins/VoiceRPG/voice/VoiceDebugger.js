@@ -496,6 +496,28 @@ class VoiceDebugger {
     }
     
     /**
+     * 重置所有状态（新增 - 供外部调用）
+     */
+    reset() {
+        console.log('[VoiceDebugger] 重置状态');
+        
+        // 清空历史
+        this.history = [];
+        this.updateHistoryDisplay();
+        
+        // 清空实时显示
+        const partialEl = this.debugUI.querySelector('.vd-partial-result');
+        if (partialEl) {
+            partialEl.textContent = '等待语音输入...';
+        }
+        
+        const finalEl = this.debugUI.querySelector('.vd-final-result');
+        if (finalEl) {
+            finalEl.textContent = '';
+        }
+    }
+
+    /**
      * 更新统计信息
      */
     updateStats() {

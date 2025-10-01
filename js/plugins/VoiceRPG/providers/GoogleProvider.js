@@ -559,6 +559,40 @@ class GoogleProvider extends BaseProvider {
     }
     
     /**
+     * 完全重置识别器状态（新增 - 用于咒语系统）
+     */
+    async resetRecognitionState() {
+        console.log('[Google] 完全重置识别器状态');
+        
+        if (this.recognition && this.isActive) {
+            try {
+                // 先停止当前识别
+                this.recognition.stop();
+                
+                // 等待停止完成
+                await new Promise(resolve => setTimeout(resolve, 50));
+                
+                // 清空所有内部状态
+                this.lastSpeechTime = null;
+                this.needsClear = false;
+                this.clearTimers();
+                
+                // 重新初始化识别器以清空内部缓冲区
+                await this.doInitialize();
+                
+                // 如果仍然激活，重新开始
+                if (this.isActive) {
+                    await this.doStart();
+                }
+                
+                console.log('[Google] 识别器状态已完全重置');
+            } catch (error) {
+                console.warn('[Google] 重置识别器状态时出错:', error);
+            }
+        }
+    }
+    
+    /**
      * 设置语言（会被锁定）
      */
     setLanguage(language) {

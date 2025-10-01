@@ -20,6 +20,7 @@ class SpellSystem {
         this.currentBattle = null;
         this.currentActor = null;
         this.currentTarget = null;
+        this.battleInitializing = false; // 战斗初始化标志
         
         // 咏唱状态
         this.isCasting = false;
@@ -28,6 +29,8 @@ class SpellSystem {
         this.castingText = '';
         this.pendingText = '';
         this.isListening = false;
+        this.accumulatedText = ''; // 累积的文本
+        this.lastProcessedText = ''; // 最后处理的完整文本
         
         // 音量分析器
         this.volumeAnalyzer = null;
@@ -233,9 +236,9 @@ class SpellSystem {
                     $gameScreen.startFlash([255, 255, 255, 255], 60);
                     
                     setTimeout(() => {
-                        $gameMessage.add(`\\C[6]【不死秘籍发动！】\\C[0]`);
-                        $gameMessage.add(`\\C[3]${this.name()}\\C[0]满血满蓝复活了！`);
-                        $gameMessage.add(`\\C[5]"30条命可不是开玩笑的！"\\C[0]`);
+                        this.addBattleMessage(`\\C[6]【不死秘籍发动！】\\C[0]`);
+                        this.addBattleMessage(`\\C[3]${this.name()}\\C[0]满血满蓝复活了！`);
+                        this.addBattleMessage(`\\C[5]"30条命可不是开玩笑的！"\\C[0]`);
                     }, 100);
                     
                     const penaltyState = this.states().find(s => 
@@ -261,9 +264,9 @@ class SpellSystem {
                         AudioManager.playSe({name: 'Damage1', volume: 90, pitch: 80});
                         
                         setTimeout(() => {
-                            $gameMessage.add(`\\C[7]【秘籍惩罚】\\C[0]`);
-                            $gameMessage.add(`\\C[3]${this.name()}\\C[0]未能触发复活...`);
-                            $gameMessage.add(`\\C[2]扣除了${penalty}点HP作为代价！\\C[0]`);
+                            this.addBattleMessage(`\\C[7]【秘籍惩罚】\\C[0]`);
+                            this.addBattleMessage(`\\C[3]${this.name()}\\C[0]未能触发复活...`);
+                            this.addBattleMessage(`\\C[2]扣除了${penalty}点HP作为代价！\\C[0]`);
                         }, 100);
                         
                         if (this.startDamagePopup) {
@@ -283,6 +286,9 @@ class SpellSystem {
     onBattleStart() {
         console.log('[SpellSystem] 战斗开始，清除标记');
         
+        // 设置战斗初始化标志，暂时禁用咒语处理
+        this.battleInitializing = true;
+        
         if ($gameTroop) {
             $gameTroop._usedUltimateMagic = {};
         }
@@ -292,6 +298,12 @@ class SpellSystem {
         });
         
         this.clearAllCooldowns();
+        
+        // 延迟一段时间后允许咒语处理
+        setTimeout(() => {
+            this.battleInitializing = false;
+            console.log('[SpellSystem] 战斗初始化完成，允许咒语处理');
+        }, 1000);
     }
     
     /**
@@ -659,9 +671,15 @@ class SpellSystem {
     /**
      * 开始咏唱（优化版）
      */
-    startCasting(actorId, targetId = null) {
+    async startCasting(actorId, targetId = null) {
         if (this.isCasting) {
             console.log('[SpellSystem] 已经在咏唱中');
+            return false;
+        }
+        
+        // 确保在战斗场景中
+        if (!$gameParty || !$gameParty.inBattle()) {
+            console.log('[SpellSystem] 不在战斗场景中，无法开始咏唱');
             return false;
         }
         
@@ -671,9 +689,49 @@ class SpellSystem {
             $gameTroop._battleInitialized = true;
         }
         
+        // 添加初始化延迟，确保战斗场景完全加载
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
         // 清理之前的状态
         this.cleanup();
         
+        // === 重置语音识别链路 ===
+            
+            // 1. 重置 VoiceRPG 控制器（异步）
+            if (window.$voiceRPG && typeof window.$voiceRPG.resetRecognitionState === 'function') {
+                console.log('[SpellSystem] 开始重置语音识别状态');
+                await window.$voiceRPG.resetRecognitionState();
+                console.log('[SpellSystem] 语音识别状态重置完成');
+            }
+            
+            // 2. 重置调试器
+            if (window.$voiceDebugger) {
+                if (typeof window.$voiceDebugger.reset === 'function') {
+                    window.$voiceDebugger.reset();
+                }
+            }
+            
+            // 3. 临时禁用语音调试器的存储功能
+            if (window.$voiceDebugger && window.$voiceDebugger.isVisible) {
+                console.log('[SpellSystem] 检测到调试器开启，临时禁用其累积功能');
+                this._debuggerWasVisible = true;
+                if (window.$voiceRPG && window.$voiceRPG.handleResult) {
+                    this._originalHandleResult = window.$voiceRPG.handleResult.bind(window.$voiceRPG);
+                    // 替换为不累积的版本
+                    window.$voiceRPG.handleResult = (result) => {
+                        if (this.isCasting && result.text) {
+                            this.processCastingResult(result.text);
+                        }
+                    };
+                }
+            }
+            
+            this.currentActor = $gameActors.actor(actorId);
+            if (!this.currentActor) {
+                console.error('[SpellSystem] 无效的角色ID:', actorId);
+                return false;
+            }
+
         // 临时禁用语音调试器的存储功能
         if (window.$voiceDebugger && window.$voiceDebugger.isVisible) {
             console.log('[SpellSystem] 检测到调试器开启，临时禁用其存储功能');
@@ -741,11 +799,29 @@ class SpellSystem {
     }
     
     /**
-     * 处理语音识别结果（重新设计）
+     * 处理语音识别结果（智能累积版）
      */
     processCastingResult(text) {
         if (!this.isCasting) {
             console.log('[SpellSystem] 不在咏唱状态，忽略输入');
+            return;
+        }
+        
+        // 额外检查：确保在战斗场景中
+        if (!$gameParty || !$gameParty.inBattle()) {
+            console.log('[SpellSystem] 不在战斗场景中，忽略输入');
+            return;
+        }
+        
+        // 额外检查：确保战斗已完全初始化
+        if (this.battleInitializing) {
+            console.log('[SpellSystem] 战斗正在初始化中，忽略输入');
+            return;
+        }
+        
+        // 额外检查：确保有当前角色
+        if (!this.currentActor) {
+            console.log('[SpellSystem] 没有当前角色，忽略输入');
             return;
         }
         
@@ -755,20 +831,67 @@ class SpellSystem {
             return;
         }
         
+        // 过滤掉常见的非咒语命令
+        const nonSpellCommands = ['互动', '确认', '确定', '是', '好', '进入', '选择', 'OK', '上', '下', '左', '右', '取消', '返回'];
+        if (nonSpellCommands.includes(cleanText)) {
+            console.log('[SpellSystem] 检测到非咒语命令，忽略:', cleanText);
+            return;
+        }
+        
         console.log('[SpellSystem] 原始输入:', text);
         console.log('[SpellSystem] 清理后:', cleanText);
+        console.log('[SpellSystem] 当前累积文本:', this.accumulatedText);
         
-        if (cleanText.includes('火球术火球术') || cleanText.length > 20) {
-            console.log('[SpellSystem] 检测到内容累积，只保留最后部分');
+        // 智能累积和清理逻辑
+        let finalText = cleanText;
+        
+        // 1. 检测明显的重复内容（如"火球术火球术"）
+        if (cleanText.includes('火球术火球术') || cleanText.includes('恶龙咆哮恶龙咆哮')) {
+            console.log('[SpellSystem] 检测到明显重复内容，提取最后部分');
             const parts = cleanText.match(/[\u4e00-\u9fa5]+/g);
             if (parts && parts.length > 0) {
-                const lastPart = parts[parts.length - 1];
-                this.pendingText = lastPart;
-                this.castingText = lastPart;
+                finalText = parts[parts.length - 1];
+                this.accumulatedText = finalText;
             }
-        } else {
-            this.pendingText = cleanText;
-            this.castingText = cleanText;
+        }
+        // 2. 检测超长文本（可能是多次累积的结果）
+        else if (cleanText.length > 40) {
+            console.log('[SpellSystem] 检测到超长文本，可能是累积结果');
+            finalText = this.extractLastCompleteSpell(cleanText);
+            this.accumulatedText = finalText;
+        }
+        // 3. 检测是否包含之前完整咒语的残留
+        else if (this.lastProcessedText && this.lastProcessedText.length > 5 && 
+                 cleanText.length > this.lastProcessedText.length + 3 && 
+                 cleanText.includes(this.lastProcessedText)) {
+            console.log('[SpellSystem] 检测到包含之前咒语的残留，提取新增部分');
+            const lastIndex = cleanText.lastIndexOf(this.lastProcessedText);
+            if (lastIndex >= 0) {
+                finalText = cleanText.substring(lastIndex + this.lastProcessedText.length);
+                this.accumulatedText = finalText;
+            }
+        }
+        // 4. 正常累积模式
+        else {
+            // 如果当前文本比累积文本长，说明是新的输入
+            if (cleanText.length > this.accumulatedText.length) {
+                this.accumulatedText = cleanText;
+                finalText = cleanText;
+                console.log('[SpellSystem] 正常累积，更新为:', finalText);
+            } else {
+                // 如果当前文本较短，可能是部分结果，保持累积文本
+                finalText = this.accumulatedText;
+                console.log('[SpellSystem] 保持累积文本:', finalText);
+            }
+        }
+        
+        // 5. 更新状态
+        this.pendingText = finalText;
+        this.castingText = finalText;
+        
+        // 只有在文本明显完整时才更新lastProcessedText
+        if (finalText.length >= 3) {
+            this.lastProcessedText = finalText;
         }
         
         console.log('[SpellSystem] 最终咏唱内容:', this.castingText);
@@ -780,6 +903,69 @@ class SpellSystem {
         
         this.resetSilenceTimer();
         this.isListening = true;
+    }
+    
+    /**
+     * 从超长文本中提取最后一个完整咒语
+     */
+    extractLastCompleteSpell(text) {
+        const knownSpells = [
+            '比那黑更黑的深渊祈求吾之深红闪光觉醒之时已然降临',
+            '漆黑烈焰使的契约者啊与汝缔结永劫之羁绊邪王真眼全开',
+            '库洛里多创造的库洛牌啊在我面前展示你真正的力量',
+            '苍天已死黄天当立岁在甲子天下大吉',
+            '生命之色涡旋流转七重之门现于世间力量之塔君临九天',
+            '来自女神的加护在此降临',
+            '低语的精灵啊请祝福我',
+            '上上下下左左右右',
+            '恶龙咆哮',
+            '火球术',
+            '邪王真眼',
+            '天命抽取',
+            '所累哇都塔纳',
+            '那又如何',
+            '电眼逼人',
+            '镭射眼',
+            '认真的一拳',
+            '普通攻击',
+            '吃我一剑',
+            '普攻',
+            '普通防御',
+            '普通恢复',
+            '登龙剑',
+            '必胜登龙剑',
+            '雷公助我',
+            '不死秘籍',
+            '不完整的不死秘籍',
+            '究极魔法',
+            '生命之色',
+            '契约胜利之剑'
+        ];
+        
+        // 按长度排序，优先匹配长咒语
+        const sortedSpells = knownSpells.sort((a, b) => b.length - a.length);
+        
+        // 查找最后一个匹配的咒语
+        let lastMatch = '';
+        let lastIndex = -1;
+        
+        for (const spell of sortedSpells) {
+            const index = text.lastIndexOf(spell);
+            if (index >= 0 && index > lastIndex) {
+                lastMatch = spell;
+                lastIndex = index;
+            }
+        }
+        
+        if (lastMatch) {
+            console.log('[SpellSystem] 找到最后匹配的咒语:', lastMatch);
+            return lastMatch;
+        } else {
+            // 如果没找到完整咒语，取最后一部分
+            const result = text.substring(Math.max(0, text.length - 15));
+            console.log('[SpellSystem] 未找到完整咒语，截取最后部分:', result);
+            return result;
+        }
     }
     
     /**
@@ -859,7 +1045,7 @@ class SpellSystem {
         this.stopVolumeAnalysis();
         this.hideCastingUI();
         
-        $gameMessage.add('\\C[2]咏唱被取消了\\C[0]');
+        this.addBattleMessage('\\C[2]咏唱被取消了\\C[0]');
         
         this.currentBattle = null;
         this.currentTarget = null;
@@ -876,6 +1062,8 @@ class SpellSystem {
         
         this.castingText = '';
         this.pendingText = '';
+        this.accumulatedText = '';
+        this.lastProcessedText = '';
         this.isListening = true;
         
         this.maxVolume = 0;
@@ -1177,14 +1365,14 @@ class SpellSystem {
                 case 'buff':
                     if (spell.buffStateId) {
                         caster.addState(spell.buffStateId);
-                        $gameMessage.add(`\\C[6]${caster.name()}\\C[0]获得了强化效果！`);
+                        this.addBattleMessage(`\\C[6]${caster.name()}\\C[0]获得了强化效果！`);
                     }
                     break;
                     
                 case 'confuse':
                     if (spell.confuseStateId && target) {
                         target.addState(spell.confuseStateId);
-                        $gameMessage.add(`\\C[5]${target.name()}\\C[0]陷入了混乱！`);
+                        this.addBattleMessage(`\\C[5]${target.name()}\\C[0]陷入了混乱！`);
                     }
                     break;
                     
@@ -1193,7 +1381,7 @@ class SpellSystem {
                         caster.addState(spell.regenStateId);
                         const healAmount = Math.floor(caster.mhp * 0.1);
                         caster.gainHp(healAmount);
-                        $gameMessage.add(`\\C[3]${caster.name()}\\C[0]恢复了${healAmount}HP！`);
+                        this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]恢复了${healAmount}HP！`);
                     }
                     break;
                     
@@ -1243,7 +1431,7 @@ class SpellSystem {
                     if (target) {
                         target.gainHp(-30);
                         AudioManager.playSe({name: 'Laser1', volume: 90, pitch: 100});
-                        $gameMessage.add(`\\C[6]激光从${caster.name()}的眼中射出！\\C[0]`);
+                        this.addBattleMessage(`\\C[6]激光从${caster.name()}的眼中射出！\\C[0]`);
                     }
                     break;
 
@@ -1257,9 +1445,9 @@ class SpellSystem {
                     // 普通防御效果
                     if (spell.defenseStateId) {
                         caster.addState(spell.defenseStateId);
-                        $gameMessage.add(`\\C[6]${caster.name()}\\C[0]获得了\\C[3]女神的加护\\C[0]！`);
-                        $gameMessage.add(`\\C[2]下回合伤害减免90%！\\C[0]`);
-                        $gameMessage.add(`\\C[5]（提示：下回合使用登龙剑可获得连携加成）\\C[0]`);
+                        this.addBattleMessage(`\\C[6]${caster.name()}\\C[0]获得了\\C[3]女神的加护\\C[0]！`);
+                        this.addBattleMessage(`\\C[2]下回合伤害减免90%！\\C[0]`);
+                        this.addBattleMessage(`\\C[5]（提示：下回合使用登龙剑可获得连携加成）\\C[0]`);
                         
                         AudioManager.playSe({name: 'Barrier', volume: 90, pitch: 100});
                         $gameScreen.startFlash([100, 200, 255, 128], 30);
@@ -1271,8 +1459,8 @@ class SpellSystem {
                     const healAmount = Math.floor(caster.mat * (spell.healMultiplier || 2.0));
                     caster.gainHp(healAmount);
                     
-                    $gameMessage.add(`\\C[3]精灵的低语响起...\\C[0]`);
-                    $gameMessage.add(`\\C[3]${caster.name()}\\C[0]恢复了\\C[2]${healAmount}\\C[0]点生命值！`);
+                    this.addBattleMessage(`\\C[3]精灵的低语响起...\\C[0]`);
+                    this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]恢复了\\C[2]${healAmount}\\C[0]点生命值！`);
                     
                     AudioManager.playSe({name: 'Heal1', volume: 90, pitch: 100});
                     
@@ -1303,11 +1491,11 @@ class SpellSystem {
                         AudioManager.playSe({name: 'Skill2', volume: 90, pitch: 80});
                         $gameScreen.startFlash([100, 255, 100, 150], 40);
                         
-                        $gameMessage.add(`\\C[3]${caster.name()}\\C[0]输入了神秘的指令...`);
-                        $gameMessage.add(`\\C[5]↑↑↓↓←←→→\\C[0]`);
-                        $gameMessage.add(`\\C[6]【不死秘籍】已激活！\\C[0]`);
-                        $gameMessage.add(`\\C[2]下回合若死亡将满血满蓝复活\\C[0]`);
-                        $gameMessage.add(`\\C[7]但若未死亡...将付出代价！\\C[0]`);
+                        this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]输入了神秘的指令...`);
+                        this.addBattleMessage(`\\C[5]↑↑↓↓←←→→\\C[0]`);
+                        this.addBattleMessage(`\\C[6]【不死秘籍】已激活！\\C[0]`);
+                        this.addBattleMessage(`\\C[2]下回合若死亡将满血满蓝复活\\C[0]`);
+                        this.addBattleMessage(`\\C[7]但若未死亡...将付出代价！\\C[0]`);
                     }
                     break;
                 
@@ -1362,7 +1550,7 @@ class SpellSystem {
         let comboBonus = 1.0;
         if (caster._lastUsedSpell === 'normal_defense') {
             comboBonus = 1.2;
-            $gameMessage.add(`\\C[6]【连携奖励】防御后的反击！\\C[0]`);
+            this.addBattleMessage(`\\C[6]【连携奖励】防御后的反击！\\C[0]`);
         }
         
         totalDamage = Math.floor(totalDamage * comboBonus);
@@ -1376,15 +1564,15 @@ class SpellSystem {
         
         AudioManager.playSe({name: 'Skill3', volume: 100, pitch: 120});
         
-        $gameMessage.add(`\\C[3]${caster.name()}\\C[0]的登龙剑斩出！`);
-        $gameMessage.add(`\\C[2]物理伤害：${physicalDamage} + 魔法伤害：${magicalDamage}\\C[0]`);
+        this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]的登龙剑斩出！`);
+        this.addBattleMessage(`\\C[2]物理伤害：${physicalDamage} + 魔法伤害：${magicalDamage}\\C[0]`);
         
         if (isCritical) {
-            $gameMessage.add(`\\C[6]【暴击！】\\C[0]伤害提升50%！`);
+            this.addBattleMessage(`\\C[6]【暴击！】\\C[0]伤害提升50%！`);
         }
         
-        $gameMessage.add(`\\C[2]总伤害：${totalDamage}\\C[0]`);
-        $gameMessage.add(`\\C[8](暴击率：${(criticalRate * 100).toFixed(0)}%)\\C[0]`);
+        this.addBattleMessage(`\\C[2]总伤害：${totalDamage}\\C[0]`);
+        this.addBattleMessage(`\\C[8](暴击率：${(criticalRate * 100).toFixed(0)}%)\\C[0]`);
         
         if (isCritical) {
             $gameScreen.startFlash([255, 255, 0, 128], 30);
@@ -1433,15 +1621,15 @@ class SpellSystem {
         AudioManager.playSe({name: 'Thunder4', volume: 100, pitch: 100});
         $gameScreen.startFlash([255, 255, 100, 200], 30);
         
-        $gameMessage.add(`\\C[5]"苍天已死，黄天当立！"\\C[0]`);
-        $gameMessage.add(`\\C[6]雷公之力从天而降！\\C[0]`);
-        $gameMessage.add(`\\C[2]造成了${totalDamage}点雷系伤害！\\C[0]`);
+        this.addBattleMessage(`\\C[5]"苍天已死，黄天当立！"\\C[0]`);
+        this.addBattleMessage(`\\C[6]雷公之力从天而降！\\C[0]`);
+        this.addBattleMessage(`\\C[2]造成了${totalDamage}点雷系伤害！\\C[0]`);
         
         // 20%概率麻痹
         if (Math.random() < (spell.paralysisChance || 0.2)) {
             if (spell.paralysisStateId && !target.isDead()) {
                 target.addState(spell.paralysisStateId);
-                $gameMessage.add(`\\C[4]${target.name()}\\C[0]被雷电\\C[6]麻痹\\C[0]了！`);
+                this.addBattleMessage(`\\C[4]${target.name()}\\C[0]被雷电\\C[6]麻痹\\C[0]了！`);
                 AudioManager.playSe({name: 'Thunder1', volume: 80, pitch: 120});
             }
         }
@@ -1450,12 +1638,12 @@ class SpellSystem {
         if (Math.random() < (spell.burnChance || 0.2)) {
             if (spell.burnStateId && !target.isDead()) {
                 target.addState(spell.burnStateId);
-                $gameMessage.add(`\\C[2]${target.name()}\\C[0]被雷火\\C[6]灼烧\\C[0]了！`);
+                this.addBattleMessage(`\\C[2]${target.name()}\\C[0]被雷火\\C[6]灼烧\\C[0]了！`);
                 AudioManager.playSe({name: 'Fire1', volume: 80, pitch: 110});
             }
         }
         
-        $gameMessage.add(`\\C[8](音量倍率：${(volumeMultiplier * 100).toFixed(0)}%)\\C[0]`);
+        this.addBattleMessage(`\\C[8](音量倍率：${(volumeMultiplier * 100).toFixed(0)}%)\\C[0]`);
     }
     
     /**
@@ -1466,8 +1654,8 @@ class SpellSystem {
         
         // 检查是否已在本场战斗中使用过
         if ($gameTroop._usedUltimateMagic && $gameTroop._usedUltimateMagic[caster.actorId()]) {
-            $gameMessage.add(`\\C[7]究极魔法已在本场战斗中使用过！\\C[0]`);
-            $gameMessage.add(`\\C[7]无法再次发动...\\C[0]`);
+            this.addBattleMessage(`\\C[7]究极魔法已在本场战斗中使用过！\\C[0]`);
+            this.addBattleMessage(`\\C[7]无法再次发动...\\C[0]`);
             return;
         }
         
@@ -1481,7 +1669,7 @@ class SpellSystem {
         const currentMP = caster.mp;
         
         if (currentMP <= 0) {
-            $gameMessage.add(`\\C[7]MP不足，无法释放究极魔法！\\C[0]`);
+            this.addBattleMessage(`\\C[7]MP不足，无法释放究极魔法！\\C[0]`);
             return;
         }
         
@@ -1532,16 +1720,16 @@ class SpellSystem {
         
         $gameScreen.startShake(9, 9, 60);
         
-        $gameMessage.add(`\\C[5]"生命之色涡旋流转..."\\C[0]`);
-        $gameMessage.add(`\\C[6]"七重之门现于世间..."\\C[0]`);
-        $gameMessage.add(`\\C[2]"力量之塔君临九天！"\\C[0]`);
-        $gameMessage.add(``);
-        $gameMessage.add(`\\C[6]【究极魔法发动！】\\C[0]`);
-        $gameMessage.add(`\\C[3]${caster.name()}\\C[0]消耗了\\C[4]${currentMP}MP\\C[0]！`);
-        $gameMessage.add(`\\C[2]造成了${totalDamage}点毁灭性伤害！\\C[0]`);
-        $gameMessage.add(``);
-        $gameMessage.add(`\\C[7]${caster.name()}陷入了力竭状态...\\C[0]`);
-        $gameMessage.add(`\\C[8](伤害构成: MAT×2[${Math.floor(caster.mat * 2)}] + MP×1.5[${Math.floor(currentMP * 1.5)}])\\C[0]`);
+        this.addBattleMessage(`\\C[5]"生命之色涡旋流转..."\\C[0]`);
+        this.addBattleMessage(`\\C[6]"七重之门现于世间..."\\C[0]`);
+        this.addBattleMessage(`\\C[2]"力量之塔君临九天！"\\C[0]`);
+        this.addBattleMessage(``);
+        this.addBattleMessage(`\\C[6]【究极魔法发动！】\\C[0]`);
+        this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]消耗了\\C[4]${currentMP}MP\\C[0]！`);
+        this.addBattleMessage(`\\C[2]造成了${totalDamage}点毁灭性伤害！\\C[0]`);
+        this.addBattleMessage(``);
+        this.addBattleMessage(`\\C[7]${caster.name()}陷入了力竭状态...\\C[0]`);
+        this.addBattleMessage(`\\C[8](伤害构成: MAT×2[${Math.floor(caster.mat * 2)}] + MP×1.5[${Math.floor(currentMP * 1.5)}])\\C[0]`);
     }
     
     /**
@@ -1592,13 +1780,13 @@ class SpellSystem {
         $gameScreen.startFlash([255, 255, 200, 200], 40);
         $gameScreen.startShake(5, 5, 30);
         
-        $gameMessage.add(`\\C[6]【契约胜利之剑】\\C[0]`);
-        $gameMessage.add(`\\C[3]${caster.name()}\\C[0]高举圣剑！`);
-        $gameMessage.add(`\\C[5]"以胜利为契，解放真名！"\\C[0]`);
-        $gameMessage.add(`\\C[6]圣光从天而降！\\C[0]`);
-        $gameMessage.add(`\\C[2]造成了${totalDamage}点光属性伤害！\\C[0]`);
-        $gameMessage.add(`\\C[8](构成: ATK×3[${physicalPart}] + MAT×2[${magicalPart}] + 固定[${fixedPart}])\\C[0]`);
-        $gameMessage.add(`\\C[8](音量倍率: ${(volumeMultiplier * 100).toFixed(0)}%)\\C[0]`);
+        this.addBattleMessage(`\\C[6]【契约胜利之剑】\\C[0]`);
+        this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]高举圣剑！`);
+        this.addBattleMessage(`\\C[5]"以胜利为契，解放真名！"\\C[0]`);
+        this.addBattleMessage(`\\C[6]圣光从天而降！\\C[0]`);
+        this.addBattleMessage(`\\C[2]造成了${totalDamage}点光属性伤害！\\C[0]`);
+        this.addBattleMessage(`\\C[8](构成: ATK×3[${physicalPart}] + MAT×2[${magicalPart}] + 固定[${fixedPart}])\\C[0]`);
+        this.addBattleMessage(`\\C[8](音量倍率: ${(volumeMultiplier * 100).toFixed(0)}%)\\C[0]`);
     }
 
     /**
@@ -1616,13 +1804,13 @@ class SpellSystem {
         if (target && !target.isDead()) {
             target.addState(targetState);
             const stateName = $dataStates[targetState].name;
-            $gameMessage.add(`\\C[5]${target.name()}\\C[0]获得了\\C[2]${stateName}\\C[0]状态！`);
+            this.addBattleMessage(`\\C[5]${target.name()}\\C[0]获得了\\C[2]${stateName}\\C[0]状态！`);
         }
         
         if (caster && !caster.isDead()) {
             caster.addState(casterState);
             const stateName = $dataStates[casterState].name;
-            $gameMessage.add(`\\C[3]${caster.name()}\\C[0]获得了\\C[2]${stateName}\\C[0]状态！`);
+            this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]获得了\\C[2]${stateName}\\C[0]状态！`);
         }
     }
 
@@ -1650,8 +1838,8 @@ class SpellSystem {
             caster.startDamagePopup();
         }
         
-        $gameMessage.add(`\\C[3]${caster.name()}\\C[0]献祭了\\C[2]${hpCost}\\C[0]点生命值！`);
-        $gameMessage.add(`\\C[5]"漆黑烈焰在此觉醒..."\\C[0]`);
+        this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]献祭了\\C[2]${hpCost}\\C[0]点生命值！`);
+        this.addBattleMessage(`\\C[5]"漆黑烈焰在此觉醒..."\\C[0]`);
         
         if (SceneManager._scene && SceneManager._scene._statusWindow) {
             SceneManager._scene._statusWindow.refresh();
@@ -1674,9 +1862,9 @@ class SpellSystem {
                 
                 AudioManager.playSe({name: 'Collapse3', volume: 100, pitch: 80});
                 
-                $gameMessage.add(`\\C[6]【邪王真眼·全开】\\C[0]`);
-                $gameMessage.add(`\\C[5]黑暗的力量回应了契约...\\C[0]`);
-                $gameMessage.add(`\\C[2]${target.name()}\\C[0]被永劫的黑暗吞噬了！`);
+                this.addBattleMessage(`\\C[6]【邪王真眼·全开】\\C[0]`);
+                this.addBattleMessage(`\\C[5]黑暗的力量回应了契约...\\C[0]`);
+                this.addBattleMessage(`\\C[2]${target.name()}\\C[0]被永劫的黑暗吞噬了！`);
                 
                 target._hp = 0;
                 target.refresh();
@@ -1700,9 +1888,9 @@ class SpellSystem {
                 
                 AudioManager.playSe({name: 'Buzzer2', volume: 90, pitch: 100});
                 
-                $gameMessage.add(`\\C[7]邪王真眼的力量失控了...\\C[0]`);
-                $gameMessage.add(`\\C[8]黑暗拒绝了你的献祭。\\C[0]`);
-                $gameMessage.add(`\\C[7]什么都没有发生...\\C[0]`);
+                this.addBattleMessage(`\\C[7]邪王真眼的力量失控了...\\C[0]`);
+                this.addBattleMessage(`\\C[8]黑暗拒绝了你的献祭。\\C[0]`);
+                this.addBattleMessage(`\\C[7]什么都没有发生...\\C[0]`);
                 
                 $gameScreen.startFlash([64, 0, 64, 64], 30);
             }
@@ -1725,16 +1913,16 @@ class SpellSystem {
             
             AudioManager.playSe({name: 'Magic3', volume: 100, pitch: 120});
             
-            $gameMessage.add(`\\C[5]"那又如何？"\\C[0]`);
-            $gameMessage.add(`\\C[6]将大局逆转吧！\\C[0]`);
-            $gameMessage.add(`\\C[5]"开！"\\C[0]`);
+            this.addBattleMessage(`\\C[5]"那又如何？"\\C[0]`);
+            this.addBattleMessage(`\\C[6]将大局逆转吧！\\C[0]`);
+            this.addBattleMessage(`\\C[5]"开！"\\C[0]`);
             
             $gameScreen.startFlash([255, 0, 255, 255], 60);
             
             setTimeout(() => {
-                $gameMessage.add(`\\C[2]我集齐了五张艾克佐迪亚！\\C[0]`);
-                $gameMessage.add(`\\C[2]艾克佐迪亚，召唤！\\C[0]`);
-                $gameMessage.add(`\\C[6]魔神火焰炮！！！\\C[0]`);
+                this.addBattleMessage(`\\C[2]我集齐了五张艾克佐迪亚！\\C[0]`);
+                this.addBattleMessage(`\\C[2]艾克佐迪亚，召唤！\\C[0]`);
+                this.addBattleMessage(`\\C[6]魔神火焰炮！！！\\C[0]`);
                 
                 const enemies = $gameTroop.aliveMembers();
                 enemies.forEach(enemy => {
@@ -1783,10 +1971,10 @@ class SpellSystem {
                             healRate >= 0.4 ? '相信卡组的力量！' : 
                             '还没到认输的时候！';
             
-            $gameMessage.add(`\\C[3]${caster.name()}\\C[0]：\\C[5]"那又如何？"\\C[0]`);
-            $gameMessage.add(`\\C[6]${spiritLevel}\\C[0]`);
-            $gameMessage.add(`\\C[3]恢复了\\C[2]${healAmount}\\C[0]点生命值！`);
-            $gameMessage.add(`\\C[8]（决斗者之魂：${(healRate * 100).toFixed(0)}%）\\C[0]`);
+            this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]：\\C[5]"那又如何？"\\C[0]`);
+            this.addBattleMessage(`\\C[6]${spiritLevel}\\C[0]`);
+            this.addBattleMessage(`\\C[3]恢复了\\C[2]${healAmount}\\C[0]点生命值！`);
+            this.addBattleMessage(`\\C[8]（决斗者之魂：${(healRate * 100).toFixed(0)}%）\\C[0]`);
             
             $gameScreen.startFlash([255, 255, 128, 128], 30);
         }
@@ -1801,8 +1989,8 @@ class SpellSystem {
         AudioManager.playSe({name: 'Powerup', volume: 100, pitch: 80});
         $gameScreen.startTint([-68, -68, -68, 68], 30);
         
-        $gameMessage.add(`\\C[3]${caster.name()}\\C[0]：\\C[5]"这是...认真的一拳！"\\C[0]`);
-        $gameMessage.add(`\\C[6]【认真系列·认真的一拳】\\C[0]`);
+        this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]：\\C[5]"这是...认真的一拳！"\\C[0]`);
+        this.addBattleMessage(`\\C[6]【认真系列·认真的一拳】\\C[0]`);
         
         setTimeout(() => {
             $gameScreen.startFlash([255, 255, 255, 255], 60);
@@ -1811,12 +1999,12 @@ class SpellSystem {
             const enemies = $gameTroop.aliveMembers();
             
             if (enemies.length > 0) {
-                $gameMessage.add(`\\C[2]一拳的冲击波席卷了整个战场！\\C[0]`);
+                this.addBattleMessage(`\\C[2]一拳的冲击波席卷了整个战场！\\C[0]`);
                 
                 enemies.forEach((enemy, index) => {
                     setTimeout(() => {
                         if (!enemy.isDead()) {
-                            $gameMessage.add(`\\C[2]${enemy.name()}\\C[0]被一拳击飞了！`);
+                            this.addBattleMessage(`\\C[2]${enemy.name()}\\C[0]被一拳击飞了！`);
                             
                             enemy._hp = 0;
                             enemy.refresh();
@@ -1842,15 +2030,15 @@ class SpellSystem {
                 });
                 
                 setTimeout(() => {
-                    $gameMessage.add(`\\C[6]所有敌人都被击倒了！\\C[0]`);
-                    $gameMessage.add(`\\C[5]"果然，认真起来还是太强了..."\\C[0]`);
+                    this.addBattleMessage(`\\C[6]所有敌人都被击倒了！\\C[0]`);
+                    this.addBattleMessage(`\\C[5]"果然，认真起来还是太强了..."\\C[0]`);
                     
                     AudioManager.playSe({name: 'Victory1', volume: 100, pitch: 100});
                     $gameScreen.startTint([0, 0, 0, 0], 30);
                 }, enemies.length * 200 + 500);
                 
             } else {
-                $gameMessage.add(`\\C[7]但是战场上已经没有敌人了...\\C[0]`);
+                this.addBattleMessage(`\\C[7]但是战场上已经没有敌人了...\\C[0]`);
                 $gameScreen.startTint([0, 0, 0, 0], 30);
             }
             
@@ -1985,12 +2173,19 @@ class SpellSystem {
     cleanup() {
         console.log('[SpellSystem] 执行清理');
         
-        if (this._debuggerWasVisible && window.$voiceRPG && this._originalOnResult) {
-            window.$voiceRPG.onResult = this._originalOnResult;
-            this._originalOnResult = null;
+        // 恢复原始处理函数
+        if (this._debuggerWasVisible && window.$voiceRPG && this._originalHandleResult) {
+            window.$voiceRPG.handleResult = this._originalHandleResult;
+            this._originalHandleResult = null;
             this._debuggerWasVisible = false;
         }
         
+        // 清空调试器（但不重启识别器）
+        if (window.$voiceDebugger && window.$voiceDebugger.reset) {
+            window.$voiceDebugger.reset();
+        }
+        
+        // 清理UI
         if (this.castingUI) {
             this.castingUI.hide();
             this.castingUI.deactivate();
@@ -2002,11 +2197,14 @@ class SpellSystem {
             this.castingUI = null;
         }
         
+        // 清理引用
         this.currentBattle = null;
         this.currentTarget = null;
         this.currentActor = null;
         this.castingText = '';
         this.pendingText = '';
+        this.accumulatedText = '';
+        this.lastProcessedText = '';
         this.isCasting = false;
         this.isListening = false;
         
@@ -2319,10 +2517,26 @@ class SpellSystem {
     }
     
     /**
+     * 通用消息显示方法
+     */
+    addBattleMessage(message) {
+        if ($gameParty && $gameParty.inBattle()) {
+            // 在战斗场景中使用战斗日志窗口
+            const battleScene = SceneManager._scene;
+            if (battleScene && battleScene._logWindow) {
+                battleScene._logWindow.push("addText", message);
+            }
+        } else {
+            // 在非战斗场景中使用普通消息窗口
+            this.addBattleMessage(message);
+        }
+    }
+    
+    /**
      * 显示失败消息
      */
     showFailMessage(message) {
-        $gameMessage.add('\\C[2]' + message + '\\C[0]');
+        this.addBattleMessage('\\C[2]' + message + '\\C[0]');
     }
     
     /**
@@ -2335,19 +2549,19 @@ class SpellSystem {
         const targetName = this.currentTarget ? this.currentTarget.name() : '敌人';
         const spellName = spell.name;
         
-        $gameMessage.add(`\\C[3]${actorName}\\C[0]使用了\\C[2]${spellName}\\C[0]！`);
+        this.addBattleMessage(`\\C[3]${actorName}\\C[0]使用了\\C[2]${spellName}\\C[0]！`);
         
         if (spell.isNoDamage) {
             if (spell.effects.includes('heal')) {
-                $gameMessage.add(`恢复了生命值！`);
+                this.addBattleMessage(`恢复了生命值！`);
             } else if (spell.effects.includes('buff')) {
-                $gameMessage.add(`获得了强化效果！`);
+                this.addBattleMessage(`获得了强化效果！`);
             } else if (spell.effects.includes('regen')) {
-                $gameMessage.add(`获得了持续恢复效果！`);
+                this.addBattleMessage(`获得了持续恢复效果！`);
             }
         } else {
             if (spell.effects.includes('damage')) {
-                $gameMessage.add(`对\\C[3]${targetName}\\C[0]造成了\\C[2]${damage}\\C[0]点伤害！`);
+                this.addBattleMessage(`对\\C[3]${targetName}\\C[0]造成了\\C[2]${damage}\\C[0]点伤害！`);
             }
         }
         
@@ -2365,9 +2579,9 @@ class SpellSystem {
         
         if (window.$voiceCalibration && window.$voiceCalibration.isCalibrated()) {
             const multiplier = window.$voiceCalibration.calculateDamageMultiplier(volumeScore);
-            $gameMessage.add(`${gradeColor}【${grade}评级】\\C[0] 音量倍率:${(multiplier * 100).toFixed(0)}%`);
+            this.addBattleMessage(`${gradeColor}【${grade}评级】\\C[0] 音量倍率:${(multiplier * 100).toFixed(0)}%`);
         } else {
-            $gameMessage.add(`${gradeColor}【${grade}评级】\\C[0] 音量:${(volumeScore * 100).toFixed(0)}%`);
+            this.addBattleMessage(`${gradeColor}【${grade}评级】\\C[0] 音量:${(volumeScore * 100).toFixed(0)}%`);
         }
     }
     
