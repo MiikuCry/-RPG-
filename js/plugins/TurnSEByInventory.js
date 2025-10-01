@@ -88,6 +88,11 @@
           cfg: parseTurnSeNote(it.note),
           stack: hasStackNote(it.note)
         }));
+      if (_turnSeItems && _turnSeItems.length) {
+        console.log(`[${PLUGIN_NAME}] 发现带 <TurnSE> 的道具:`, _turnSeItems.map(e => ({ id: e.item.id, name: e.item.name, cfg: e.cfg, stack: e.stack })));
+      } else {
+        console.log(`[${PLUGIN_NAME}] 本场战斗未发现任何带 <TurnSE> 的道具。`);
+      }
     } catch (e) {
       console.error(PLUGIN_NAME, e);
       _turnSeItems = [];
@@ -117,6 +122,7 @@
         if (count <= 0) return;
 
         const times = stack ? count : 1;
+        console.log(`[${PLUGIN_NAME}] 第${turn}回合触发: 道具#${item.id}(${item.name}) 数量=${count} 次数=${times} SE=${cfg.name}@${cfg.volume}/${cfg.pitch}/${cfg.pan}`);
         for (let i = 0; i < times; i++) {
           AudioManager.playSe({
             name: cfg.name, volume: cfg.volume, pitch: cfg.pitch, pan: cfg.pan
