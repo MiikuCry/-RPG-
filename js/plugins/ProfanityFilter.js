@@ -254,6 +254,367 @@
             if (window.$gameMessage && !window.$gameMessage.isBusy()) {
                 window.$gameMessage.add(`\\C[2][脏话检测]\\C[0] 检测到: "${detectionResult.word}"`);
             }
+            
+            // 🔥 关键改进：把脏话当作指令，立即触发语音系统的清理机制
+            console.log('[ProfanityFilter] 🎯 脏话指令识别完成，触发系统清理...');
+            this.triggerVoiceSystemCleanup();
+        }
+        
+        /**
+         * 触发语音系统的清理机制 - 模拟指令执行后的清理
+         */
+        triggerVoiceSystemCleanup() {
+            console.log('[ProfanityFilter] 🧹 触发语音系统清理机制');
+            
+            try {
+                // 方法1：使用VoiceDebugger的清理功能（最彻底）
+                if (window.$voiceDebugger && window.$voiceDebugger.onControlCleanup) {
+                    console.log('[ProfanityFilter] 使用VoiceDebugger清理机制');
+                    window.$voiceDebugger.onControlCleanup();
+                    return;
+                }
+                
+                // 方法2：使用VoiceRPG的重置功能
+                if (window.$voiceRPG && window.$voiceRPG.resetRecognitionState) {
+                    console.log('[ProfanityFilter] 使用VoiceRPG重置功能');
+                    window.$voiceRPG.resetRecognitionState();
+                }
+                
+                // 方法3：使用Provider的重置功能
+                if (window.$voiceRPG && window.$voiceRPG.provider && window.$voiceRPG.provider.resetRecognitionState) {
+                    console.log('[ProfanityFilter] 使用Provider重置功能');
+                    window.$voiceRPG.provider.resetRecognitionState();
+                }
+                
+                // 方法4：使用SpellSystem的重启输入功能
+                if (window.$spellSystem && window.$spellSystem.restartInput) {
+                    console.log('[ProfanityFilter] 使用SpellSystem重启输入功能');
+                    window.$spellSystem.restartInput();
+                }
+                
+                // 方法5：清理CommandSystem缓存
+                if (window.$commandSystem && window.$commandSystem.matchCache) {
+                    console.log('[ProfanityFilter] 清理CommandSystem缓存');
+                    window.$commandSystem.matchCache.clear();
+                }
+                
+                console.log('[ProfanityFilter] ✅ 语音系统清理完成');
+                
+            } catch (error) {
+                console.warn('[ProfanityFilter] 触发语音系统清理时出错:', error);
+                
+                // 降级处理：使用自己的清理方法
+                this.fallbackCleanup();
+            }
+        }
+        
+        /**
+         * 降级清理方法
+         */
+        fallbackCleanup() {
+            console.log('[ProfanityFilter] 🔄 使用降级清理方法');
+            
+            // 立即阻断累积
+            this.immediateBlockAccumulation();
+            
+            // 快速清理显示和累积文本
+            setTimeout(() => {
+                this.clearDebuggerDisplay();
+                this.clearAccumulatedText();
+                console.log('[ProfanityFilter] 🧹 降级清理：已清理显示和累积文本');
+            }, 100);
+            
+            // 彻底清理语音识别内容
+            setTimeout(() => {
+                this.clearVoiceRecognitionContent();
+                console.log('[ProfanityFilter] 🧹 降级清理：已彻底清理语音内容');
+            }, 500);
+        }
+        
+        /**
+         * 清空语音识别内容 - 防止脏话重复触发
+         */
+        clearVoiceRecognitionContent() {
+            console.log('[ProfanityFilter] 🧹 清空语音识别内容，防止重复触发');
+            
+            try {
+                // 方法1: 温和清理VoiceRPG主系统状态
+                if (window.$voiceRPG) {
+                    // 延迟清理识别队列，避免影响当前检测
+                    setTimeout(() => {
+                        if (window.$voiceRPG.recognitionQueue) {
+                            window.$voiceRPG.recognitionQueue = [];
+                            console.log('[ProfanityFilter] 已清空VoiceRPG识别队列');
+                        }
+                    }, 100);
+                    
+                    // 不立即重置识别状态，避免中断检测
+                    console.log('[ProfanityFilter] 跳过立即重置，避免影响检测');
+                }
+                
+                // 方法2: 延迟清理语音识别提供商状态
+                if (window.$voiceRPG && window.$voiceRPG.provider) {
+                    const provider = window.$voiceRPG.provider;
+                    
+                    // 延迟清理，避免中断当前检测
+                    setTimeout(() => {
+                        // 只清理Google Provider的缓存状态
+                        if (provider.name === 'Google') {
+                            provider.needsClear = false;
+                            console.log('[ProfanityFilter] 已清理Google Provider缓存状态');
+                        }
+                    }, 200);
+                }
+                
+                // 方法3: 清理咒语系统状态（如果在咒语模式）
+                if (window.$spellSystem && window.$spellSystem.isCasting) {
+                    if (typeof window.$spellSystem.restartInput === 'function') {
+                        window.$spellSystem.restartInput();
+                        console.log('[ProfanityFilter] 已重置咒语系统输入状态');
+                    }
+                }
+                
+                // 方法4: 清理命令系统缓存
+                if (window.$commandSystem && typeof window.$commandSystem.clearCache === 'function') {
+                    window.$commandSystem.clearCache();
+                    console.log('[ProfanityFilter] 已清理命令系统缓存');
+                }
+                
+                // 方法5: 快速清理语音调试器显示（在第二阶段调用时）
+                if (window.$voiceDebugger) {
+                    // 立即清空显示内容
+                    this.clearDebuggerDisplay();
+                    
+                    // 重置调试器状态
+                    if (typeof window.$voiceDebugger.reset === 'function') {
+                        window.$voiceDebugger.reset();
+                        console.log('[ProfanityFilter] 已重置语音调试器状态');
+                    }
+                    
+                    // 立即更新显示为清理状态
+                    if (typeof window.$voiceDebugger.updateFinalResult === 'function') {
+                        window.$voiceDebugger.updateFinalResult('');
+                    }
+                    if (typeof window.$voiceDebugger.updatePartialResult === 'function') {
+                        window.$voiceDebugger.updatePartialResult('');
+                    }
+                }
+                
+                // 方法6: 温和重启语音识别（避免影响检测）
+                setTimeout(() => {
+                    if (window.$voiceRPG && window.$voiceRPG.isActive) {
+                        // 只清理内部状态，不重启服务
+                        if (window.$voiceRPG.recognitionQueue) {
+                            window.$voiceRPG.recognitionQueue = [];
+                        }
+                        console.log('[ProfanityFilter] 已清理语音识别队列');
+                    }
+                }, 500); // 延迟500ms，避免影响当前检测
+                
+                console.log('[ProfanityFilter] ✅ 语音识别内容清理完成');
+                
+            } catch (error) {
+                console.warn('[ProfanityFilter] ⚠️ 清理语音识别内容时出错:', error);
+            }
+        }
+        
+        /**
+         * 立即阻断文本累积 - 防止脏话与后续文本拼接
+         * 注意：这是温和的清理，不会影响SpellSystem的核心逻辑
+         */
+        immediateBlockAccumulation() {
+            try {
+                console.log('[ProfanityFilter] 🚫 立即阻断文本累积');
+                
+                // 温和地清理咒语系统的累积文本（保留核心逻辑不变）
+                if (window.$spellSystem) {
+                    // 备份当前状态，以防需要恢复
+                    const backupState = {
+                        isCasting: window.$spellSystem.isCasting,
+                        castingSpell: window.$spellSystem.castingSpell,
+                        isListening: window.$spellSystem.isListening
+                    };
+                    
+                    // 只清理文本累积，不影响咒语系统的其他状态
+                    window.$spellSystem.accumulatedText = '';
+                    window.$spellSystem.pendingText = '';
+                    window.$spellSystem.castingText = '';
+                    window.$spellSystem.lastProcessedText = '';
+                    
+                    // 保持咒语系统的核心状态不变
+                    window.$spellSystem.isCasting = backupState.isCasting;
+                    window.$spellSystem.castingSpell = backupState.castingSpell;
+                    window.$spellSystem.isListening = backupState.isListening;
+                    
+                    console.log('[ProfanityFilter] 已温和清理咒语系统累积文本（保留核心状态）');
+                }
+                
+                // 温和地重置语音识别提供商的内部累积（避免强制中断）
+                if (window.$voiceRPG && window.$voiceRPG.provider) {
+                    const provider = window.$voiceRPG.provider;
+                    
+                    // 温和重置Google Provider的内部状态
+                    if (provider.name === 'Google' && provider.recognition) {
+                        // 检查当前状态，避免InvalidStateError
+                        try {
+                            // 只在识别活跃时才进行温和重置
+                            if (provider.isActive && provider.status && provider.status.isListening) {
+                                // 设置标记，让下次结果被忽略
+                                provider.needsClear = true;
+                                
+                                // 温和地停止当前识别（不使用abort）
+                                if (provider.recognition.stop) {
+                                    provider.recognition.stop();
+                                }
+                                
+                                // 延迟重启，确保状态清理
+                                setTimeout(() => {
+                                    if (provider.isActive && provider.start) {
+                                        provider.start();
+                                    }
+                                }, 100);
+                                
+                                console.log('[ProfanityFilter] 已温和重置Google Provider状态');
+                            } else {
+                                console.log('[ProfanityFilter] Google Provider未在监听，跳过重置');
+                            }
+                        } catch (error) {
+                            console.warn('[ProfanityFilter] 重置Google Provider时出错:', error);
+                        }
+                    }
+                }
+                
+                // 清空VoiceRPG主系统的队列
+                if (window.$voiceRPG && window.$voiceRPG.recognitionQueue) {
+                    window.$voiceRPG.recognitionQueue = [];
+                    console.log('[ProfanityFilter] 已清空VoiceRPG识别队列');
+                }
+                
+            } catch (error) {
+                console.warn('[ProfanityFilter] 阻断累积时出错:', error);
+            }
+        }
+        
+        /**
+         * 清理所有累积文本
+         */
+        clearAccumulatedText() {
+            try {
+                console.log('[ProfanityFilter] 🧹 清理所有累积文本');
+                
+                // 清理咒语系统的所有文本状态
+                if (window.$spellSystem) {
+                    window.$spellSystem.accumulatedText = '';
+                    window.$spellSystem.pendingText = '';
+                    window.$spellSystem.castingText = '';
+                    window.$spellSystem.lastProcessedText = '';
+                    
+                    // 如果有咒语UI，也清理
+                    if (window.$spellSystem.castingUI) {
+                        window.$spellSystem.castingUI._castingText = '';
+                        if (window.$spellSystem.castingUI.refresh) {
+                            window.$spellSystem.castingUI.refresh();
+                        }
+                    }
+                    
+                    console.log('[ProfanityFilter] 已清理咒语系统所有文本状态');
+                }
+                
+                // 清理命令系统缓存
+                if (window.$commandSystem && window.$commandSystem.matchCache) {
+                    window.$commandSystem.matchCache.clear();
+                    console.log('[ProfanityFilter] 已清理命令系统缓存');
+                }
+                
+                // 清理语音调试器的文本显示
+                this.clearDebuggerDisplay();
+                
+            } catch (error) {
+                console.warn('[ProfanityFilter] 清理累积文本时出错:', error);
+            }
+        }
+        
+        /**
+         * 强制清空调试器显示内容 - 快速版
+         */
+        clearDebuggerDisplay() {
+            try {
+                if (!window.$voiceDebugger || !window.$voiceDebugger.debugUI) {
+                    return;
+                }
+                
+                const debugUI = window.$voiceDebugger.debugUI;
+                
+                // 快速清空所有文本内容 - 使用更激进的策略
+                const allElements = debugUI.querySelectorAll('*');
+                allElements.forEach(el => {
+                    if (el.textContent && el.textContent.trim()) {
+                        const content = el.textContent.toLowerCase();
+                        // 检查是否包含任何脏话相关内容
+                        if (content.includes('我操') || content.includes('傻逼') || content.includes('卧槽') || 
+                            content.includes('草') || content.includes('操') || content.includes('靠') ||
+                            content.includes('艹') || content.includes('妈的') || content.includes('sb') ||
+                            content.includes('fuck') || content.includes('shit') || content.includes('damn')) {
+                            
+                            // 立即清空
+                            el.textContent = '';
+                            el.innerHTML = '';
+                            
+                            // 如果是输入或结果显示区域，设置为等待状态
+                            if (el.classList.contains('vd-partial-result')) {
+                                el.textContent = '等待语音输入...';
+                            } else if (el.classList.contains('vd-final-result')) {
+                                el.textContent = '';
+                            }
+                        }
+                    }
+                });
+                
+                // 特别处理已知的显示元素
+                const knownElements = [
+                    '.vd-partial-result',
+                    '.vd-final-result', 
+                    '.vd-history',
+                    '.vd-command-history',
+                    '.vd-text-display',
+                    '.vd-result',
+                    '.vd-command',
+                    '.vd-input',
+                    '.vd-output'
+                ];
+                
+                knownElements.forEach(selector => {
+                    const elements = debugUI.querySelectorAll(selector);
+                    elements.forEach(el => {
+                        if (selector === '.vd-partial-result') {
+                            el.textContent = '等待语音输入...';
+                        } else {
+                            el.textContent = '';
+                            el.innerHTML = '';
+                        }
+                    });
+                });
+                
+                // 强制刷新调试器历史
+                if (window.$voiceDebugger.history) {
+                    // 只保留非脏话的历史记录
+                    window.$voiceDebugger.history = window.$voiceDebugger.history.filter(item => {
+                        const text = (item.text || '').toLowerCase();
+                        return !(text.includes('我操') || text.includes('傻逼') || text.includes('卧槽') ||
+                                text.includes('草') || text.includes('操') || text.includes('靠'));
+                    });
+                    
+                    // 更新历史显示
+                    if (typeof window.$voiceDebugger.updateHistoryDisplay === 'function') {
+                        window.$voiceDebugger.updateHistoryDisplay();
+                    }
+                }
+                
+                console.log('[ProfanityFilter] ⚡ 快速清空调试器显示内容完成');
+                
+            } catch (error) {
+                console.warn('[ProfanityFilter] 清空调试器显示时出错:', error);
+            }
         }
         
         /**
@@ -345,75 +706,94 @@
     window.ProfanityFilter = ProfanityFilter;
     window.$profanityFilter = new ProfanityFilter();
     
-    // 添加全局测试函数
-    window.testProfanityFilter = function(text = "我操") {
-        console.log('=== 脏话检测测试 ===');
-        console.log('测试文本:', text);
-        
+    // === 测试和调试函数 ===
+    
+    
+    // 手动测试函数
+    window.forceCheckProfanity = function(text) {
         if (!window.$profanityFilter) {
             console.error('脏话检测器未初始化！');
-            return false;
+            return;
         }
+        console.log('强制检测:', text);
+        return window.$profanityFilter.processVoiceResult(text);
+    };
+    
+    
+    // 添加测试脏话+自动清理功能
+    window.testProfanityWithCleanup = function(text = "我操") {
+        console.log('=== 测试脏话检测+温和清理 ===');
+        if (!window.$profanityFilter) {
+            console.error('脏话检测器未初始化！');
+            return;
+        }
+        
+        console.log('测试文本:', text);
+        console.log('预期效果: 检测脏话 → 播放嘟嘟 → 当作指令处理 → 触发语音系统清理机制');
+        console.log('🎯 核心改进：把脏话当作特殊指令，利用原有的指令清理机制！');
+        
+        // 先测试基础检测
+        console.log('🔍 测试基础检测功能...');
+        console.log('词库大小:', window.$profanityFilter.profanityWords.length);
+        console.log('是否包含"我操":', window.$profanityFilter.profanityWords.includes('我操'));
+        console.log('是否包含"操":', window.$profanityFilter.profanityWords.includes('操'));
         
         return window.$profanityFilter.testDetection(text);
     };
     
-    // 添加全局状态查看函数
-    window.checkProfanityFilter = function() {
-        console.log('=== 脏话检测器状态 ===');
+    // 纯检测测试（不清理）
+    window.testProfanityOnly = function(text = "我操") {
         if (!window.$profanityFilter) {
             console.error('脏话检测器未初始化！');
             return;
         }
         
-        const stats = window.$profanityFilter.getStats();
-        console.log('状态:', stats.enabled ? '启用' : '禁用');
-        console.log('词库大小:', stats.wordCount);
-        console.log('检测次数:', stats.detectedCount);
-        console.log('音效列表:', window.$profanityFilter.beepSounds);
-        
-        return stats;
+        const result = window.$profanityFilter.detectProfanity(text);
+        if (result && result.detected) {
+            console.log('✅ 检测到脏话:', result.word);
+            window.$profanityFilter.playBeepSound(2);
+            return true;
+        } else {
+            console.log('❌ 未检测到脏话');
+            return false;
+        }
     };
     
-    // 添加语音监听器 - 强制监听所有console.log
-    window.enableVoiceLogging = function() {
-        console.log('=== 启用语音日志监听 ===');
-        
-        const originalLog = console.log;
-        console.log = function(...args) {
-            // 调用原始log
-            originalLog.apply(console, args);
-            
-            // 检查是否包含语音识别相关的文本
-            const text = args.join(' ');
-            
-            // 查找可能的语音文本
-            if (text.includes('识别结果:') || text.includes('解析命令:') || text.includes('Google') || text.includes('CommandSystem')) {
-                // 尝试提取文本内容
-                const matches = text.match(/[：:]\s*([^(（,，\s]+)/);
-                if (matches && matches[1] && window.$profanityFilter) {
-                    const voiceText = matches[1].trim();
-                    if (voiceText && voiceText.length > 0) {
-                        console.log('🎯 [强制检测] 从日志中提取到语音文本:', voiceText);
-                        window.$profanityFilter.processVoiceResult(voiceText);
-                    }
-                }
-            }
-        };
-        
-        console.log('✅ 语音日志监听已启用，现在说话试试！');
-    };
-    
-    // 添加手动强制检测函数
-    window.forceCheckProfanity = function(text) {
-        console.log('=== 强制检测 ===');
+    // 清理调试器显示
+    window.clearDebuggerDisplay = function() {
         if (!window.$profanityFilter) {
             console.error('脏话检测器未初始化！');
             return;
         }
+        window.$profanityFilter.clearDebuggerDisplay();
+        console.log('✅ 调试器显示已清理');
+    };
+    
+    // 状态检查
+    window.checkProfanityFilterStatus = function() {
+        if (!window.$profanityFilter) {
+            console.error('❌ 脏话检测器未初始化！');
+            return;
+        }
         
-        console.log('强制检测文本:', text);
-        return window.$profanityFilter.processVoiceResult(text);
+        console.log('✅ 脏话检测器状态:');
+        console.log('- 启用状态:', window.$profanityFilter.enabled);
+        console.log('- 词库大小:', window.$profanityFilter.profanityWords.length);
+        console.log('- 包含"操":', window.$profanityFilter.profanityWords.includes('操'));
+        
+        // 快速测试
+        const testResult = window.$profanityFilter.detectProfanity('我操');
+        console.log('- 测试结果:', testResult ? '✅ 正常' : '❌ 异常');
+    };
+    
+    // 手动清理系统
+    window.cleanupProfanityHistory = function() {
+        if (!window.$profanityFilter) {
+            console.error('脏话检测器未初始化！');
+            return;
+        }
+        window.$profanityFilter.triggerVoiceSystemCleanup();
+        console.log('✅ 系统清理完成');
     };
     
     // 集成到现有的语音识别系统
@@ -440,8 +820,15 @@
             window.BaseProvider.prototype.handleResult = function(text, isFinal = true, confidence = 0.9) {
                 // 脏话检测 - 在最早期就检测
                 if (window.$profanityFilter && text && isFinal) {
-                    console.log('[ProfanityFilter] BaseProvider检测:', text);
+                    console.log('[ProfanityFilter] 🎯 BaseProvider Hook触发:', text, 'isFinal:', isFinal);
                     window.$profanityFilter.processVoiceResult(text);
+                } else {
+                    console.log('[ProfanityFilter] BaseProvider Hook跳过:', {
+                        hasFilter: !!window.$profanityFilter,
+                        hasText: !!text,
+                        isFinal: isFinal,
+                        text: text
+                    });
                 }
                 
                 // 继续原始处理
