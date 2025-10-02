@@ -1468,8 +1468,15 @@ class SpellSystem {
                 }
             }
             
-            // 清理引用
-            this.cleanup();
+            // 关键修复：等待所有动画和消息完成后再继续战斗
+            this.waitForBattleReady(() => {
+                if (battleScene && battleScene.continueAfterSpell) {
+                    battleScene.continueAfterSpell();
+                }
+                // 清理引用
+                this.cleanup();
+            });
+            
         }, 300);
     }
     
@@ -2881,14 +2888,24 @@ class SpellSystem {
      */
     addBattleMessage(message) {
         if ($gameParty && $gameParty.inBattle()) {
-            // 在战斗场景中使用战斗日志窗口
+            // 在战斗场景中使用战斗日志窗口，但不立即显示，而是排队
             const battleScene = SceneManager._scene;
-            if (battleScene && battleScene._logWindow) {
+            if (battleScene && battleScene._logWindow && !battleScene._logWindow.isBusy()) {
+                // 只有在日志窗口不忙碌时才添加消息，避免干扰战斗流程
                 battleScene._logWindow.push("addText", message);
+            } else {
+                // 如果日志窗口忙碌，延迟显示
+                setTimeout(() => {
+                    if (battleScene && battleScene._logWindow && !battleScene._logWindow.isBusy()) {
+                        battleScene._logWindow.push("addText", message);
+                    }
+                }, 500);
             }
         } else {
             // 在非战斗场景中使用普通消息窗口
-            this.addBattleMessage(message);
+            if ($gameMessage && !$gameMessage.isBusy()) {
+                $gameMessage.add(message);
+            }
         }
     }
     
@@ -3001,6 +3018,51 @@ class SpellSystem {
             if (volumeScore >= 0.40) return 1.0;  // C级：100%
             return 0.8;  // D级：80%（只有很低音量才惩罚）
         }
+    }
+
+    /**
+     * 等待战斗准备就绪（确保消息和动画完成）
+     */
+    waitForBattleReady(callback, maxWait = 3000) {
+        const startTime = Date.now();
+        
+        const checkReady = () => {
+            // 检查是否超时
+            if (Date.now() - startTime > maxWait) {
+                console.warn('[SpellSystem] 等待战斗准备超时，强制继续');
+                callback();
+                return;
+            }
+            
+            // 检查战斗管理器是否忙碌
+            if (BattleManager.isBusy && BattleManager.isBusy()) {
+                console.log('[SpellSystem] BattleManager忙碌中，等待...');
+                setTimeout(checkReady, 100);
+                return;
+            }
+            
+            // 检查消息系统是否忙碌
+            if ($gameMessage && $gameMessage.isBusy()) {
+                console.log('[SpellSystem] 消息系统忙碌中，等待...');
+                setTimeout(checkReady, 100);
+                return;
+            }
+            
+            // 检查战斗场景是否忙碌
+            const battleScene = SceneManager._scene;
+            if (battleScene && battleScene._spriteset && battleScene._spriteset.isBusy()) {
+                console.log('[SpellSystem] 战斗动画忙碌中，等待...');
+                setTimeout(checkReady, 100);
+                return;
+            }
+            
+            // 所有检查通过，执行回调
+            console.log('[SpellSystem] 战斗准备就绪，继续流程');
+            callback();
+        };
+        
+        // 开始检查
+        setTimeout(checkReady, 200);
     }
 
     /**

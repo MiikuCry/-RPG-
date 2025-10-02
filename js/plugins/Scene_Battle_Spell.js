@@ -125,12 +125,8 @@
             // 再次延迟检查，确保战斗结束逻辑有时间执行
             setTimeout(() => {
                 if (!BattleManager.isBattleEnd()) {
-                    console.log('[Scene_Battle] 战斗未结束，继续战斗流程');
-                    if (BattleManager._subject) {
-                        BattleManager._subject.onAllActionsEnd();
-                        BattleManager._subject.removeCurrentAction();
-                    }
-                    this.continueAfterSpell();
+                    console.log('[Scene_Battle] 战斗未结束，等待SpellSystem控制继续流程');
+                    // 注意：现在由SpellSystem的waitForBattleReady来控制继续时机
                 } else {
                     console.log('[Scene_Battle] 战斗已结束，不继续战斗流程');
                 }
@@ -546,24 +542,33 @@
                     return;
                 }
                 
-                // 如果战斗未结束，回到命令选择状态
-                console.log('[Scene_Battle] 战斗未结束，回到命令选择状态');
+                console.log('[Scene_Battle] 战斗未结束，正确结束当前角色行动');
                 
-                if (this._actorCommandWindow) {
-                    this._actorCommandWindow.activate();
-                    this._actorCommandWindow.open();
-                }
-                
-                // 确保战斗状态正确
-                if (window.BattleManager._phase !== 'input') {
-                    window.BattleManager._phase = 'input';
+                // 关键修复：确保当前角色有正确的行动状态
+                if (BattleManager._subject && BattleManager._subject === this._currentActor) {
+                    console.log('[Scene_Battle] 结束当前角色行动，进入下一个行动者');
+                    
+                    // 移除当前行动（咒语已执行完毕）
+                    if (BattleManager._subject.currentAction()) {
+                        BattleManager._subject.removeCurrentAction();
+                    }
+                    
+                    // 确保角色行动状态正确
+                    BattleManager._subject.setActionState("waiting");
+                    
+                    // 正确结束行动，让战斗流程继续
+                    BattleManager.endAction();
+                } else {
+                    console.log('[Scene_Battle] 当前没有行动者或行动者不匹配，调用selectNextCommand');
+                    BattleManager.selectNextCommand();
                 }
             }
         } catch (e) {
             console.error('[Scene_Battle] 继续战斗时出错:', e);
-            // 错误恢复：回到输入阶段
+            // 错误恢复：调用selectNextCommand让战斗继续
             if (window.BattleManager && !BattleManager.isBattleEnd()) {
-                window.BattleManager._phase = 'input';
+                console.log('[Scene_Battle] 错误恢复：调用selectNextCommand');
+                BattleManager.selectNextCommand();
             }
         }
     };
@@ -618,12 +623,26 @@
         
         console.log('[Scene_Battle] 开始咒语咏唱');
         
-        // 设置一个动作标记，防止 endAction 出错
-        if (!BattleManager._action) {
+        // 关键修复：为咒语创建正确的Game_Action对象
+        if (actor && !actor.currentAction()) {
+            // 创建一个虚拟的技能行动来代表咒语
             const action = new Game_Action(actor);
-            action.setAttack();
-            action.setTarget(0);
-            BattleManager._action = action;
+            action.setSkill(1); // 使用基础攻击技能ID作为占位符
+            action.setTarget(-1); // 设置为敌人目标
+            
+            // 将这个行动添加到角色的行动队列
+            actor._actions = actor._actions || [];
+            actor._actions.push(action);
+            
+            console.log('[Scene_Battle] 为咒语创建了Game_Action对象');
+        }
+        
+        // 确保BattleManager有正确的当前行动者和行动
+        if (!BattleManager._subject) {
+            BattleManager._subject = actor;
+        }
+        if (!BattleManager._action && actor.currentAction()) {
+            BattleManager._action = actor.currentAction();
         }
         
         // 隐藏战斗窗口
