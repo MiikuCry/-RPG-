@@ -184,7 +184,12 @@ class Window_SpellCasting extends Window_Base {
             gradient.addColorStop(0, ColorManager.mpGaugeColor1());
             gradient.addColorStop(1, ColorManager.mpGaugeColor2());
             this.contents.context.fillStyle = gradient;
-            this.contents.context.fillRect(x, y, fillWidth, height);
+            // 使用安全的fillRect调用
+            if (window.safeContextFillRect) {
+                window.safeContextFillRect(this.contents.context, x, y, fillWidth, height);
+            } else {
+                this.contents.context.fillRect(Math.floor(x), Math.floor(y), Math.floor(fillWidth), Math.floor(height));
+            }
         }
         
         // 数值
@@ -259,7 +264,12 @@ class Window_SpellCasting extends Window_Base {
             gradient.addColorStop(0, color1);
             gradient.addColorStop(1, color2);
             this.contents.context.fillStyle = gradient;
-            this.contents.context.fillRect(x, y, fillWidth, height);
+            // 使用安全的fillRect调用
+            if (window.safeContextFillRect) {
+                window.safeContextFillRect(this.contents.context, x, y, fillWidth, height);
+            } else {
+                this.contents.context.fillRect(Math.floor(x), Math.floor(y), Math.floor(fillWidth), Math.floor(height));
+            }
         }
         
         // 音量百分比

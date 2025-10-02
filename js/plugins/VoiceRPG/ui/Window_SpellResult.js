@@ -56,7 +56,12 @@ class Window_SpellResult extends Window_Base {
         gradient.addColorStop(0, 'rgba(0, 0, 0, 0.8)');
         gradient.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
         this.contents.context.fillStyle = gradient;
-        this.contents.context.fillRect(0, 0, this.innerWidth, this.innerHeight);
+        // 使用安全的fillRect调用
+        if (window.safeContextFillRect) {
+            window.safeContextFillRect(this.contents.context, 0, 0, this.innerWidth, this.innerHeight);
+        } else {
+            this.contents.context.fillRect(0, 0, Math.floor(this.innerWidth), Math.floor(this.innerHeight));
+        }
     }
     
     drawHeader(spell) {
@@ -151,7 +156,12 @@ class Window_SpellResult extends Window_Base {
         gradient.addColorStop(1, this.shadeColor(color, -20));
         
         this.contents.context.fillStyle = gradient;
-        this.contents.context.fillRect(x, barY, fillWidth, barHeight);
+        // 使用安全的fillRect调用
+        if (window.safeContextFillRect) {
+            window.safeContextFillRect(this.contents.context, x, barY, fillWidth, barHeight);
+        } else {
+            this.contents.context.fillRect(Math.floor(x), Math.floor(barY), Math.floor(fillWidth), Math.floor(barHeight));
+        }
         
         // 百分比（右侧）
         this.changeTextColor(color);

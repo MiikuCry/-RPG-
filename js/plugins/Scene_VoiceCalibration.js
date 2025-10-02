@@ -288,7 +288,12 @@
                 gradient.addColorStop(0, color1);
                 gradient.addColorStop(1, color2);
                 this._mainWindow.contents.context.fillStyle = gradient;
-                this._mainWindow.contents.context.fillRect(barX, y, fillWidth, barHeight);
+                // 使用安全的fillRect调用
+                if (window.safeContextFillRect) {
+                    window.safeContextFillRect(this._mainWindow.contents.context, barX, y, fillWidth, barHeight);
+                } else {
+                    this._mainWindow.contents.context.fillRect(Math.floor(barX), Math.floor(y), Math.floor(fillWidth), Math.floor(barHeight));
+                }
             }
             
             // 百分比
