@@ -32,6 +32,12 @@ class Window_SpellCasting extends Window_Base {
         this._volume = 0;
         this._animationCount = 0;
         
+        // 滚动相关
+        this._scrollY = 0;
+        this._maxScrollY = 0;
+        this._spellItemHeight = 38;
+        this._visibleSpellCount = 8;
+        
         // 设置窗口背景透明度
         this.setBackgroundType(1); // 1=暗色背景
         this.createContents();
@@ -45,7 +51,19 @@ class Window_SpellCasting extends Window_Base {
     
     setSpellList(spells) {
         this._spellList = spells;
+        this._scrollY = 0; // 重置滚动位置
+        this.updateScrollLimit();
         this.refresh();
+    }
+    
+    updateScrollLimit() {
+        // 计算最大滚动距离
+        const totalSpells = this._spellList.length;
+        if (totalSpells > this._visibleSpellCount) {
+            this._maxScrollY = (totalSpells - this._visibleSpellCount) * this._spellItemHeight;
+        } else {
+            this._maxScrollY = 0;
+        }
     }
     
     updateCastingText(text) {
@@ -152,7 +170,7 @@ class Window_SpellCasting extends Window_Base {
         // 第三行提示（更明显的说明）
         this.contents.fontSize = 16;
         this.changeTextColor(ColorManager.textColor());
-        const tips3 = '※ 如果识别错误，请按两次空格键清除后重新录制';
+        const tips3 = '※ 如果识别错误，请按两次空格键清除后重新录制 | 滚轮或↑↓键滚动咒语列表';
         this.drawText(tips3, 0, footerY + 45, this.innerWidth, 'center');
     }
     
@@ -335,13 +353,69 @@ class Window_SpellCasting extends Window_Base {
     }
     
     drawSpellList(x, y) {
-        const maxSpells = Math.min(8, this._spellList.length);
+        const listHeight = this._visibleSpellCount * this._spellItemHeight;
         
-        for (let i = 0; i < maxSpells; i++) {
+        // 绘制滚动区域背景
+        this.contents.fillRect(x - 5, y - 5, 260, listHeight + 10, 'rgba(0,0,0,0.2)');
+        
+        // 计算显示范围
+        const startIndex = Math.floor(this._scrollY / this._spellItemHeight);
+        const endIndex = Math.min(startIndex + this._visibleSpellCount + 1, this._spellList.length);
+        
+        // 设置裁剪区域
+        const clipRect = new Rectangle(x - 5, y, 260, listHeight);
+        this.contents.context.save();
+        this.contents.context.beginPath();
+        this.contents.context.rect(clipRect.x, clipRect.y, clipRect.width, clipRect.height);
+        this.contents.context.clip();
+        
+        // 绘制可见的咒语项
+        for (let i = startIndex; i < endIndex; i++) {
             const spell = this._spellList[i];
-            const yPos = y + i * 38;
+            const yPos = y + (i * this._spellItemHeight) - this._scrollY;
             
-            this.drawSpellItem(x, yPos, spell);
+            // 只绘制在可见区域内的项目
+            if (yPos >= y - this._spellItemHeight && yPos < y + listHeight) {
+                this.drawSpellItem(x, yPos, spell);
+            }
+        }
+        
+        // 恢复裁剪区域
+        this.contents.context.restore();
+        
+        // 绘制滚动条
+        if (this._maxScrollY > 0) {
+            this.drawScrollBar(x + 265, y, listHeight);
+        }
+        
+        // 绘制咒语计数
+        this.drawSpellCount(x, y + listHeight + 10);
+    }
+    
+    drawScrollBar(x, y, height) {
+        const scrollBarWidth = 8;
+        const scrollBarHeight = height;
+        
+        // 滚动条背景
+        this.contents.fillRect(x, y, scrollBarWidth, scrollBarHeight, 'rgba(100,100,100,0.3)');
+        
+        // 滚动条滑块
+        const scrollRatio = this._scrollY / this._maxScrollY;
+        const thumbHeight = Math.max(20, scrollBarHeight * (this._visibleSpellCount / this._spellList.length));
+        const thumbY = y + (scrollBarHeight - thumbHeight) * scrollRatio;
+        
+        this.contents.fillRect(x + 1, thumbY, scrollBarWidth - 2, thumbHeight, 'rgba(200,200,200,0.8)');
+    }
+    
+    drawSpellCount(x, y) {
+        this.changeTextColor(ColorManager.systemColor());
+        this.contents.fontSize = 14;
+        const countText = `咒语: ${this._spellList.length}个`;
+        this.drawText(countText, x, y, 150);
+        
+        if (this._maxScrollY > 0) {
+            this.changeTextColor(ColorManager.textColor(8));
+            this.drawText('滚轮滚动查看更多', x + 100, y, 150);
         }
     }
     
@@ -374,6 +448,9 @@ class Window_SpellCasting extends Window_Base {
         super.update();
         this._animationCount++;
         
+        // 处理滚动输入
+        this.processScrollInput();
+        
         // 更新闪烁效果
         if (this._animationCount % 5 === 0 && this._castingText) {
             this.drawCastingArea(20, 140);
@@ -382,6 +459,35 @@ class Window_SpellCasting extends Window_Base {
         // 更新操作提示（让空格和ESC提示更明显）
         if (this._animationCount % 30 === 0) {
             this.drawFooter();
+        }
+    }
+    
+    processScrollInput() {
+        if (!this.active || this._maxScrollY <= 0) return;
+        
+        let scrollChanged = false;
+        
+        // 鼠标滚轮滚动
+        if (TouchInput.wheelY !== 0) {
+            const scrollSpeed = this._spellItemHeight;
+            this._scrollY += TouchInput.wheelY > 0 ? scrollSpeed : -scrollSpeed;
+            scrollChanged = true;
+        }
+        
+        // 键盘滚动（上下箭头键）
+        if (Input.isPressed('up')) {
+            this._scrollY -= 2;
+            scrollChanged = true;
+        }
+        if (Input.isPressed('down')) {
+            this._scrollY += 2;
+            scrollChanged = true;
+        }
+        
+        // 限制滚动范围
+        if (scrollChanged) {
+            this._scrollY = Math.max(0, Math.min(this._scrollY, this._maxScrollY));
+            this.drawRightSection(); // 重绘右侧咒语列表
         }
     }
     

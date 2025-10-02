@@ -40,7 +40,7 @@ class SpellSystem {
         
         // 配置
         this.config = {
-            minAccuracy: 0.35, // 提高匹配阈值到35%
+            minAccuracy: 0.45, // 提高匹配阈值到45%，避免奇怪词汇匹配
             maxDamageMultiplier: 2.0,
             volumeWeight: 0.3,
             accuracyWeight: 0.7,
@@ -407,7 +407,7 @@ class SpellSystem {
             name: '普通攻击',
             incantation: '吃我一剑',
             element: 'none',
-            basePower: 100,
+            basePower: 100,  // ATK=30时伤害30左右
             powerMultiplier: 1.0,
             mpCost: 0,
             description: '最基础的物理攻击',
@@ -421,7 +421,7 @@ class SpellSystem {
             name: '火球术',
             incantation: '比那黑更黑的深渊祈求吾之深红闪光觉醒之时已然降临',
             element: 'fire',
-            basePower: 100,
+            basePower: 103,  // MAT=30时伤害40左右（30×1.03×1.3≈40）
             powerMultiplier: 1.3,
             mpCost: 5,
             description: '基础火系魔法，替代普通攻击',
@@ -435,7 +435,7 @@ class SpellSystem {
             name: '恶龙咆哮',
             incantation: '恶龙咆哮',
             element: 'none',
-            basePower: 80,
+            basePower: 167,  // MAT=30时伤害20-100左右（30×1.67×0.6~3.0≈30~150，音量敏感）
             powerMultiplier: 1.0,
             mpCost: 3,
             description: '完全依赖音量的技能，普通伤害略低于普攻，但高音量时威力惊人',
@@ -500,7 +500,7 @@ class SpellSystem {
             element: 'none',
             basePower: 30,
             mpCost: 10,
-            description: '电眼逼人啊电眼逼人，固定造成30点伤害',
+            description: '电眼逼人啊电眼逼人，固定造成40点伤害',
             difficulty: 1,
             effects: ['laser_eye_fixed'],
             isFixedDamage: true,
@@ -546,11 +546,11 @@ class SpellSystem {
             element: 'none',
             basePower: 0,
             mpCost: 10,
-            description: '立即恢复MAT × 2点HP',
+            description: '立即恢复MAT × 4点HP',
             difficulty: 1,
             effects: ['heal_formula'],
             isNoDamage: true,
-            healMultiplier: 2.0,
+            healMultiplier: 4.0,
             shameFactor: 0.6
         });
         
@@ -615,7 +615,7 @@ class SpellSystem {
             alternativeName: '生命之色',
             element: 'none',
             basePower: 0,
-            mpCost: -1,
+            mpCost: 0, // 特殊：消耗全部MP，在效果中处理
             description: '消耗全部MP的究极魔法，造成巨额伤害但下回合无法行动且防御下降',
             difficulty: 3,
             effects: ['ultimate_magic_damage'],
@@ -659,7 +659,7 @@ class SpellSystem {
             incantation: config.incantation,
             alternativeName: config.alternativeName,
             element: config.element || 'none',
-            basePower: config.basePower || 100,
+            basePower: config.basePower || 115,  // 默认提升15点
             powerMultiplier: config.powerMultiplier || 1.0,
             mpCost: config.mpCost || 0,
             description: config.description || '',
@@ -1257,7 +1257,7 @@ class SpellSystem {
             // 更严格的匹配条件
             if (accuracy >= this.config.minAccuracy && accuracy > bestAccuracy) {
                 // 额外检查：如果相似度太低，即使超过阈值也拒绝
-                if (accuracy < 0.4) {
+                if (accuracy < 0.5) {
                     console.log(`[SpellSystem] 相似度过低，拒绝匹配: ${spell.name}, 准确度: ${accuracy}`);
                     continue;
                 }
@@ -1448,16 +1448,24 @@ class SpellSystem {
         setTimeout(() => {
             this.showCastingResult(spell, damage, accuracy, volumeScore);
             
-            // 处理咒语效果
-            if (battleScene instanceof Scene_Battle && battleScene.processSpellAction) {
-                try {
-                    battleScene.processSpellAction(caster, targetEnemy, spell, damage);
-                } catch (error) {
-                    console.error('[SpellSystem] 处理咒语动作失败:', error);
-                    this.executeSpellEffects(spell, damage, caster, targetEnemy, volumeScore);
-                }
-            } else {
+            // 处理咒语效果 - 优先使用SpellSystem的处理
+            try {
+                // 先执行SpellSystem的完整效果处理
                 this.executeSpellEffects(spell, damage, caster, targetEnemy, volumeScore);
+                
+                // 然后执行Scene_Battle的补充处理（主要是动画和状态刷新）
+                if (battleScene instanceof Scene_Battle && battleScene.processSpellAction) {
+                    // 只调用动画和状态刷新，不重复处理伤害
+                    battleScene.playSpellAnimation(targetEnemy, spell);
+                    battleScene.applySpellStates(targetEnemy, spell);
+                    battleScene.safeRefreshStatus();
+                }
+            } catch (error) {
+                console.error('[SpellSystem] 处理咒语效果失败:', error);
+                // 备用：如果SpellSystem处理失败，使用Scene_Battle处理
+                if (battleScene instanceof Scene_Battle && battleScene.processSpellAction) {
+                    battleScene.processSpellAction(caster, targetEnemy, spell, damage);
+                }
             }
             
             // 清理引用
@@ -1591,10 +1599,11 @@ class SpellSystem {
                     break;
 
                 case 'laser_eye_fixed':
+                    // 镭射眼固定伤害 - 由Scene_Battle处理，这里只显示消息
                     if (target) {
-                        target.gainHp(-30);
                         this.playSafeSe('Laser1', 90, 100);
                         this.addBattleMessage(`\\C[6]激光从${caster.name()}的眼中射出！\\C[0]`);
+                        this.addBattleMessage(`\\C[2]${target.name()}\\C[0]受到了\\C[2]40\\C[0]点激光伤害！`);
                     }
                     break;
 
@@ -1618,18 +1627,13 @@ class SpellSystem {
                     break;
                 
                 case 'heal_formula':
-                    // 普通恢复效果
-                    const healAmount = Math.floor(caster.mat * (spell.healMultiplier || 2.0));
-                    caster.gainHp(healAmount);
+                    // 普通恢复效果 - 由Scene_Battle处理，这里只显示消息
+                    const healAmount = Math.floor(caster.mat * (spell.healMultiplier || 4.0));
                     
                     this.addBattleMessage(`\\C[3]精灵的低语响起...\\C[0]`);
                     this.addBattleMessage(`\\C[3]${caster.name()}\\C[0]恢复了\\C[2]${healAmount}\\C[0]点生命值！`);
                     
                     this.playSafeSe('Heal1', 90, 100);
-                    
-                    if (caster.startDamagePopup) {
-                        caster.startDamagePopup();
-                    }
                     break;
                 
                 case 'dragon_sword_damage':
@@ -1681,11 +1685,11 @@ class SpellSystem {
     executeDragonSword(caster, target, spell, volumeScore) {
         if (!target) return;
         
-        // 计算物理伤害部分：ATK × 1.2 + 6
-        const physicalDamage = Math.floor(caster.atk * 1.2 + 6);
+        // 计算物理伤害部分：ATK × 2.0 + 10（调整到120左右）
+        const physicalDamage = Math.floor(caster.atk * 2.0 + 10);
         
-        // 计算魔法伤害部分：MAT × 1.0 + 4
-        const magicalDamage = Math.floor(caster.mat * 1.0 + 4);
+        // 计算魔法伤害部分：MAT × 1.7 + 10
+        const magicalDamage = Math.floor(caster.mat * 1.7 + 10);
         
         // 基础总伤害
         let totalDamage = physicalDamage + magicalDamage;
@@ -1749,21 +1753,10 @@ class SpellSystem {
         if (!target) return;
         
         // 计算基础伤害：MAT × 1.6 + 5
-        let baseDamage = Math.floor(caster.mat * 1.6 + (spell.fixedBonus || 5));
+        let baseDamage = Math.floor(caster.mat * 5.0 + (spell.fixedBonus || 0));   // 调整到MAT=30时伤害150左右
         
         // 音量影响伤害浮动
-        let volumeMultiplier = 1.0;
-        
-        if (window.$voiceCalibration && window.$voiceCalibration.isCalibrated()) {
-            volumeMultiplier = window.$voiceCalibration.calculateDamageMultiplier(volumeScore);
-            volumeMultiplier = Math.max(0.7, Math.min(1.3, volumeMultiplier));
-        } else {
-            if (volumeScore < 0.2) volumeMultiplier = 0.7;
-            else if (volumeScore < 0.4) volumeMultiplier = 0.85;
-            else if (volumeScore < 0.6) volumeMultiplier = 1.0;
-            else if (volumeScore < 0.8) volumeMultiplier = 1.15;
-            else volumeMultiplier = 1.3;
-        }
+        let volumeMultiplier = this.calculateVolumeMultiplier(volumeScore);
         
         let totalDamage = Math.floor(baseDamage * volumeMultiplier);
         
@@ -1839,22 +1832,12 @@ class SpellSystem {
         // 消耗全部MP
         caster._mp = 0;
         
-        // 计算伤害：MAT × 2 + 消耗MP × 1.5
-        let baseDamage = Math.floor(caster.mat * 2 + currentMP * 1.5);
+        // 计算伤害：调整到200左右（假设30MAT，50MP）
+        let baseDamage = Math.floor(caster.mat * 4.0 + currentMP * 2.0 + 0);
         
-        // 音量浮动影响（低浮动：0.9~1.1）
-        let volumeMultiplier = 1.0;
-        
-        if (window.$voiceCalibration && window.$voiceCalibration.isCalibrated()) {
-            volumeMultiplier = window.$voiceCalibration.calculateDamageMultiplier(volumeScore);
-            volumeMultiplier = Math.max(0.9, Math.min(1.1, volumeMultiplier));
-        } else {
-            if (volumeScore < 0.3) volumeMultiplier = 0.9;
-            else if (volumeScore < 0.5) volumeMultiplier = 0.95;
-            else if (volumeScore < 0.7) volumeMultiplier = 1.0;
-            else if (volumeScore < 0.9) volumeMultiplier = 1.05;
-            else volumeMultiplier = 1.1;
-        }
+        // 音量浮动影响（究极魔法：限制在0.9~1.3倍）
+        let volumeMultiplier = this.calculateVolumeMultiplier(volumeScore);
+        volumeMultiplier = Math.max(0.9, Math.min(1.3, volumeMultiplier));
         
         let totalDamage = Math.floor(baseDamage * volumeMultiplier);
         
@@ -1901,26 +1884,15 @@ class SpellSystem {
     executeExcalibur(caster, target, spell, volumeScore) {
         if (!target) return;
         
-        // 计算伤害：ATK × 3 + MAT × 2 + 200
-        const physicalPart = Math.floor(caster.atk * 3);
-        const magicalPart = Math.floor(caster.mat * 2);
-        const fixedPart = spell.fixedBonus || 200;
+        // 计算伤害：调整到150左右（ATK=30, MAT=30）
+        const physicalPart = Math.floor(caster.atk * 2.5);  // 30×2.5 = 75
+        const magicalPart = Math.floor(caster.mat * 2.5);   // 30×2.5 = 75
+        const fixedPart = spell.fixedBonus || 0;    // 调整固定加成
         
         let baseDamage = physicalPart + magicalPart + fixedPart;
         
-        // 音量中幅度浮动影响（0.8~1.3倍）
-        let volumeMultiplier = 1.0;
-        
-        if (window.$voiceCalibration && window.$voiceCalibration.isCalibrated()) {
-            volumeMultiplier = window.$voiceCalibration.calculateDamageMultiplier(volumeScore);
-            volumeMultiplier = Math.max(0.8, Math.min(1.3, volumeMultiplier));
-        } else {
-            if (volumeScore < 0.2) volumeMultiplier = 0.8;
-            else if (volumeScore < 0.4) volumeMultiplier = 0.9;
-            else if (volumeScore < 0.6) volumeMultiplier = 1.0;
-            else if (volumeScore < 0.8) volumeMultiplier = 1.15;
-            else volumeMultiplier = 1.3;
-        }
+        // 音量中幅度浮动影响
+        let volumeMultiplier = this.calculateVolumeMultiplier(volumeScore);
         
         let totalDamage = Math.floor(baseDamage * volumeMultiplier);
         
@@ -1950,32 +1922,42 @@ class SpellSystem {
         this.addBattleMessage(`\\C[2]造成了${totalDamage}点光属性伤害！\\C[0]`);
         this.addBattleMessage(`\\C[8](构成: ATK×3[${physicalPart}] + MAT×2[${magicalPart}] + 固定[${fixedPart}])\\C[0]`);
         this.addBattleMessage(`\\C[8](音量倍率: ${(volumeMultiplier * 100).toFixed(0)}%)\\C[0]`);
+        
+        console.log(`[SpellSystem] 契约胜利之剑伤害计算详情:`);
+        console.log(`  - ATK: ${caster.atk}, MAT: ${caster.mat}`);
+        console.log(`  - 物理部分: ATK×3 = ${caster.atk}×3 = ${physicalPart}`);
+        console.log(`  - 魔法部分: MAT×2 = ${caster.mat}×2 = ${magicalPart}`);
+        console.log(`  - 固定部分: ${fixedPart}`);
+        console.log(`  - 基础伤害: ${physicalPart} + ${magicalPart} + ${fixedPart} = ${baseDamage}`);
+        console.log(`  - 音量倍率: ${volumeMultiplier} (音量分数: ${volumeScore})`);
+        console.log(`  - 最终伤害: ${baseDamage} × ${volumeMultiplier} = ${totalDamage}`);
+        console.log(`  - 实际应用: target.gainHp(-${totalDamage})`);
     }
 
     /**
      * 天命抽取效果实现（塔罗牌版：根据概率抽取不同强度的效果）
      */
     executeDestinyDraw(caster, target) {
-        // 定义塔罗牌池和概率权重
+        // 定义塔罗牌池和概率权重（调整：提升烂牌概率，降低中牌和王牌概率）
         const tarotCards = [
-            // 高概率 (40% 总概率)
-            { id: 56, name: '圣杯', type: 'beneficial', weight: 8, description: '生命值自动恢复10%' },
-            { id: 57, name: '宝剑', type: 'debuff', weight: 8, description: '双抗降低30%' },
-            { id: 58, name: '权杖', type: 'beneficial', weight: 8, description: '双攻提升30%' },
-            { id: 59, name: '金币', type: 'beneficial', weight: 8, description: '下回合10倍暴击率' },
-            { id: 60, name: '星星', type: 'beneficial', weight: 8, description: '下回合10倍敏捷' },
-            { id: 61, name: '月亮', type: 'debuff', weight: 8, description: '下回合命中率减半' },
+            // 高概率 - 烂牌 (55% 总概率，从40%提升)
+            { id: 57, name: '宝剑', type: 'debuff', weight: 12, description: '双抗降低30%' },
+            { id: 61, name: '月亮', type: 'debuff', weight: 12, description: '下回合命中率减半' },
+            { id: 64, name: '正义', type: 'debuff', weight: 10, description: '1回合不能行动' },
+            { id: 65, name: '高塔', type: 'debuff', weight: 10, description: '最大生命值设为75%' },
+            { id: 70, name: '世界', type: 'debuff', weight: 11, description: '无法行动1-5回合' },
             
-            // 中概率 (35% 总概率)
-            { id: 63, name: '太阳', type: 'beneficial', weight: 7, description: '全属性提升20%' },
-            { id: 64, name: '正义', type: 'debuff', weight: 7, description: '1回合不能行动' },
-            { id: 65, name: '高塔', type: 'debuff', weight: 7, description: '最大生命值设为75%' },
-            { id: 66, name: '恶魔', type: 'mixed', weight: 7, description: '双攻200%，双防60%' },
-            { id: 67, name: '命运之轮', type: 'beneficial', weight: 7, description: '生命值恢复40%，法力值恢复30%' },
+            // 中概率 - 普通牌 (30% 总概率，从35%降低)
+            { id: 56, name: '圣杯', type: 'beneficial', weight: 6, description: '生命值自动恢复10%' },
+            { id: 58, name: '权杖', type: 'beneficial', weight: 6, description: '双攻提升30%' },
+            { id: 59, name: '金币', type: 'beneficial', weight: 6, description: '下回合10倍暴击率' },
+            { id: 60, name: '星星', type: 'beneficial', weight: 6, description: '下回合10倍敏捷' },
+            { id: 63, name: '太阳', type: 'beneficial', weight: 6, description: '全属性提升20%' },
             
-            // 低概率 (25% 总概率)
-            { id: 69, name: '死神', type: 'mixed', weight: 5, description: '最大生命值设为1%' },
-            { id: 70, name: '世界', type: 'debuff', weight: 5, description: '无法行动1-5回合' },
+            // 低概率 - 王牌 (15% 总概率，从25%降低)
+            { id: 66, name: '恶魔', type: 'mixed', weight: 3, description: '双攻200%，双防60%' },
+            { id: 67, name: '命运之轮', type: 'beneficial', weight: 4, description: '生命值恢复40%，法力值恢复30%' },
+            { id: 69, name: '死神', type: 'mixed', weight: 3, description: '最大生命值设为1%' },
             { id: 'fool', name: '愚者', type: 'debuff', weight: 5, description: '恢复全部生命值' },
             { id: 'judgment', name: '审判', type: 'special', weight: 5, description: '双方均恢复至满血' }
         ];
@@ -2372,25 +2354,18 @@ class SpellSystem {
         // 基础伤害 = 属性值 * 基础倍率 * 技能倍率
         let damage = baseStat * (spell.basePower / 100) * (spell.powerMultiplier || 1.0);
         
-        // 准确度影响
-        damage *= (0.7 + accuracy * 0.3);
-        
-        // 音量影响
+        // 音量和准确度影响
         if (spell.id === 'dragon_roar') {
-            damage = this.calculateDragonRoarDamage(spell, volumeScore);
+            // 恶龙咆哮使用专用计算（内部包含准确度和音量处理）
+            damage = this.calculateDragonRoarDamage(spell, volumeScore, accuracy);
         } else {
-            let volumeMultiplier = 1.0;
+            // 其他技能使用通用计算
+            // 准确度影响：识别成功就是1.0倍，最准确时2.0倍
+            const accuracyMultiplier = 1.0 + (accuracy - 0.45) / (1.0 - 0.45) * 1.0;
+            damage *= Math.max(1.0, Math.min(2.0, accuracyMultiplier));
             
-            if (window.$voiceCalibration && window.$voiceCalibration.isCalibrated()) {
-                volumeMultiplier = window.$voiceCalibration.calculateDamageMultiplier(volumeScore);
-            } else {
-                if (volumeScore < 0.2) volumeMultiplier = 0.8;
-                else if (volumeScore < 0.4) volumeMultiplier = 0.9;
-                else if (volumeScore < 0.6) volumeMultiplier = 1.0;
-                else if (volumeScore < 0.8) volumeMultiplier = 1.1;
-                else volumeMultiplier = 1.2;
-            }
-            
+            // 音量影响
+            let volumeMultiplier = this.calculateVolumeMultiplier(volumeScore);
             damage *= volumeMultiplier;
         }
         
@@ -2437,34 +2412,41 @@ class SpellSystem {
     }
 
     /**
-     * 恶龙咆哮专用伤害计算（优化版）
+     * 恶龙咆哮专用伤害计算（修复版）
      */
-    calculateDragonRoarDamage(spell, volumeScore) {
+    calculateDragonRoarDamage(spell, volumeScore, accuracy) {
         const mat = this.currentActor.mat;
         
-        // 新的音量倍率表：普通伤害略低于普攻，最高时达到雷公助我水平
-        let multiplier = 0.3; // 最低音量：30%基础伤害
+        // 恶龙咆哮特殊的音量倍率：更大的音量影响
+        let volumeMultiplier;
+        if (volumeScore >= 0.90) volumeMultiplier = 3.0;  // SSS级：300%（极大影响）
+        else if (volumeScore >= 0.80) volumeMultiplier = 2.5;  // SS级：250%
+        else if (volumeScore >= 0.70) volumeMultiplier = 2.0;  // S级：200%
+        else if (volumeScore >= 0.60) volumeMultiplier = 1.5;  // A级：150%
+        else if (volumeScore >= 0.50) volumeMultiplier = 1.2;  // B级：120%
+        else if (volumeScore >= 0.40) volumeMultiplier = 1.0;  // C级：100%
+        else volumeMultiplier = 0.6;  // D级：60%（低音量惩罚）
         
-        if (volumeScore < 0.2) {
-            multiplier = 0.3;  // 很低音量：30%基础伤害
-        } else if (volumeScore < 0.4) {
-            multiplier = 0.6;  // 低音量：60%基础伤害
-        } else if (volumeScore < 0.6) {
-            multiplier = 1.0;  // 中等音量：100%基础伤害（略低于普攻的80%）
-        } else if (volumeScore < 0.8) {
-            multiplier = 1.5;  // 高音量：150%基础伤害
-        } else if (volumeScore < 0.9) {
-            multiplier = 2.2;  // 很高音量：220%基础伤害
-        } else {
-            multiplier = 3.0;  // 最高音量：300%基础伤害（达到雷公助我水平）
-        }
+        // 修复：basePower 80 就是 80%，直接使用
+        // 基础伤害 = MAT × (basePower/100) × 音量倍率
+        let damage = mat * (spell.basePower / 100) * volumeMultiplier;
         
-        // 基础伤害 = MAT × 0.8 × 音量倍率
-        let damage = mat * (spell.basePower / 100) * multiplier;
+        // 新的准确度系统：识别成功1.0倍，最准确2.0倍
+        const accuracyMultiplier = 1.0 + (accuracy - 0.45) / (1.0 - 0.45) * 1.0;
+        damage *= Math.max(1.0, Math.min(2.0, accuracyMultiplier));
         
         // 确保最低伤害和最高伤害限制
         damage = Math.max(spell.minDamage || 1, damage);
         damage = Math.min(spell.maxDamage || 999, damage);
+        
+        console.log(`[SpellSystem] 恶龙咆哮伤害计算详情:`);
+        console.log(`  - MAT: ${mat}`);
+        console.log(`  - basePower: ${spell.basePower}% (${spell.basePower/100})`);
+        console.log(`  - 音量倍率: ${volumeMultiplier} (音量分数: ${volumeScore})`);
+        
+        const finalAccuracyMultiplier = Math.max(1.0, Math.min(2.0, accuracyMultiplier));
+        console.log(`  - 准确度: ${accuracy} (准确度倍率: ${finalAccuracyMultiplier.toFixed(2)})`);
+        console.log(`  - 计算过程: ${mat} × ${spell.basePower/100} × ${volumeMultiplier} × ${finalAccuracyMultiplier.toFixed(2)} = ${Math.floor(damage)}`);
         
         return Math.floor(damage);
     }
@@ -2544,19 +2526,33 @@ class SpellSystem {
     // ========== 辅助方法 ==========
     
     /**
-     * 角色学习咒语
+     * 角色学习咒语（记录学习顺序）
      */
     learnSpell(actorId, spellId) {
         if (!this.learnedSpells.has(actorId)) {
             this.learnedSpells.set(actorId, new Set());
         }
         
+        // 如果还没学过这个咒语，才添加到学习顺序中
+        const wasAlreadyLearned = this.learnedSpells.get(actorId).has(spellId);
         this.learnedSpells.get(actorId).add(spellId);
+        
         console.log(`[SpellSystem] 角色${actorId}学会了咒语: ${spellId}`);
         
         const actor = $gameActors.actor(actorId);
         if (actor) {
             actor._learnedSpells = Array.from(this.learnedSpells.get(actorId));
+            
+            // 记录学习顺序
+            if (!actor._learnedSpellsOrder) {
+                actor._learnedSpellsOrder = [];
+            }
+            
+            // 只有新学的咒语才添加到顺序列表末尾
+            if (!wasAlreadyLearned && !actor._learnedSpellsOrder.includes(spellId)) {
+                actor._learnedSpellsOrder.push(spellId);
+                console.log(`[SpellSystem] 更新学习顺序: ${actor._learnedSpellsOrder.join(', ')}`);
+            }
         }
     }
     
@@ -2584,15 +2580,34 @@ class SpellSystem {
     }
     
     /**
-     * 获取角色已学会的咒语列表
+     * 获取角色已学会的咒语列表（按学习顺序排列）
      */
     getLearnedSpells(actorId) {
         const learned = [];
         const spellIds = this.learnedSpells.get(actorId) || new Set();
         
-        for (const [id, spell] of this.spells) {
-            if (spellIds.has(id)) {
-                learned.push(spell);
+        // 如果角色有学习顺序记录，按顺序返回
+        const actor = $gameActors.actor(actorId);
+        if (actor && actor._learnedSpellsOrder) {
+            // 按学习顺序遍历
+            for (const spellId of actor._learnedSpellsOrder) {
+                if (spellIds.has(spellId) && this.spells.has(spellId)) {
+                    learned.push(this.spells.get(spellId));
+                }
+            }
+            
+            // 添加任何在Set中但不在顺序列表中的咒语（兼容性处理）
+            for (const spellId of spellIds) {
+                if (!actor._learnedSpellsOrder.includes(spellId) && this.spells.has(spellId)) {
+                    learned.push(this.spells.get(spellId));
+                }
+            }
+        } else {
+            // 如果没有顺序记录，按默认顺序（注册顺序）
+            for (const [id, spell] of this.spells) {
+                if (spellIds.has(id)) {
+                    learned.push(spell);
+                }
             }
         }
         
@@ -2796,7 +2811,7 @@ class SpellSystem {
             for (const [id, spell] of this.spells) {
                 if (this.hasLearnedSpell(this.currentActor.actorId(), id) && this.checkRequirements(spell)) {
                     const accuracy = this.calculateAccuracyWithPhonetic(text, spell.incantation);
-                    if (accuracy > 0.3) {
+                    if (accuracy > 0.45) {
                         matches.push({
                             spell: spell,
                             accuracy: accuracy
@@ -2951,6 +2966,24 @@ class SpellSystem {
     }
     
     /**
+     * 新的音量倍率计算（跟评级走）
+     */
+    calculateVolumeMultiplier(volumeScore) {
+        if (window.$voiceCalibration && window.$voiceCalibration.isCalibrated()) {
+            return window.$voiceCalibration.calculateDamageMultiplier(volumeScore);
+        } else {
+            // 新的音量倍率系统：跟评级走
+            if (volumeScore >= 0.90) return 1.9;  // SSS级：接近翻倍
+            if (volumeScore >= 0.80) return 1.7;  // SS级：170%
+            if (volumeScore >= 0.70) return 1.5;  // S级：150%
+            if (volumeScore >= 0.60) return 1.3;  // A级：130%
+            if (volumeScore >= 0.50) return 1.1;  // B级：110%
+            if (volumeScore >= 0.40) return 1.0;  // C级：100%
+            return 0.8;  // D级：80%（只有很低音量才惩罚）
+        }
+    }
+
+    /**
      * 计算评级
      */
     calculateGrade(accuracy, volume) {
@@ -3067,15 +3100,20 @@ if (typeof module !== 'undefined' && module.exports) {
                 });
                 window.$spellSystem.learnedSpells = restored;
 
-                // 同步到角色实例，便于 hasLearnedSpell 的回退读取
-                if ($gameActors && typeof $gameActors.actor === 'function') {
-                    restored.forEach((set, actorId) => {
-                        const actor = $gameActors.actor(actorId);
-                        if (actor) {
-                            actor._learnedSpells = Array.from(set);
-                        }
-                    });
-                }
+                    // 同步到角色实例，便于 hasLearnedSpell 的回退读取
+                    if ($gameActors && typeof $gameActors.actor === 'function') {
+                        restored.forEach((set, actorId) => {
+                            const actor = $gameActors.actor(actorId);
+                            if (actor) {
+                                actor._learnedSpells = Array.from(set);
+                                // 如果没有学习顺序，根据当前学会的咒语创建一个默认顺序
+                                if (!actor._learnedSpellsOrder) {
+                                    actor._learnedSpellsOrder = Array.from(set);
+                                    console.log(`[SpellSystem] 为角色${actorId}创建默认学习顺序:`, actor._learnedSpellsOrder);
+                                }
+                            }
+                        });
+                    }
                 
                 console.log('[SpellSystem] 咒语学习数据已从存档恢复:', restored);
             } else {

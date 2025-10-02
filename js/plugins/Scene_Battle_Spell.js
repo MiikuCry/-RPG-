@@ -274,6 +274,40 @@
             if (actor.startDamagePopup) {
                 actor.startDamagePopup();
             }
+        } else if (spell.effects.includes('heal_formula')) {
+            // 普通恢复效果
+            const healAmount = Math.floor(actor.mat * (spell.healMultiplier || 4.0));
+            actor.gainHp(healAmount);
+            
+            // 显示治疗弹窗
+            if (actor.startDamagePopup) {
+                const originalResult = actor._result;
+                actor._result = { hpDamage: -healAmount, hpAffected: true };
+                actor.startDamagePopup();
+                actor._result = originalResult;
+            }
+            
+            console.log(`[Scene_Battle] 普通恢复生效: ${actor.name()}恢复了${healAmount}点HP`);
+        } else if (spell.effects.includes('laser_eye_fixed')) {
+            // 镭射眼固定伤害
+            if (target && !target.isDead()) {
+                target.gainHp(-40);
+                
+                // 显示伤害弹窗
+                if (target.startDamagePopup) {
+                    const originalResult = target._result;
+                    target._result = { hpDamage: 40, hpAffected: true };
+                    target.startDamagePopup();
+                    target._result = originalResult;
+                }
+                
+                // 检查是否死亡
+                if (target.isDead() && target.performCollapse) {
+                    target.performCollapse();
+                }
+                
+                console.log(`[Scene_Battle] 镭射眼生效: ${target.name()}受到40点固定伤害`);
+            }
         }
         
         // 特殊效果处理 - 添加这部分！
@@ -288,6 +322,67 @@
             // 调用 SpellSystem 的天命抽取效果
             if (window.$spellSystem) {
                 window.$spellSystem.executeDestinyDraw(actor, target);
+            }
+        }
+        
+        if (spell.effects.includes('soredowa_dokana')) {
+            // 所累哇都塔纳效果（备用处理）
+            if (window.$spellSystem) {
+                window.$spellSystem.executeSoreDowaDokana(actor, target, spell, 0.8);
+            }
+        }
+        
+        if (spell.effects.includes('serious_punch')) {
+            // 认真的一拳效果（备用处理）
+            if (window.$spellSystem) {
+                window.$spellSystem.executeSeriousPunch(actor, target);
+            }
+        }
+        
+        if (spell.effects.includes('defense_buff')) {
+            // 普通防御效果
+            if (spell.defenseStateId && actor.addState) {
+                actor.addState(spell.defenseStateId);
+                console.log(`[Scene_Battle] 普通防御生效: ${actor.name()}获得女神的加护`);
+            }
+        }
+        
+        if (spell.effects.includes('dragon_sword_damage')) {
+            // 登龙剑效果（备用处理）
+            if (window.$spellSystem) {
+                window.$spellSystem.executeDragonSword(actor, target, spell, 0.8);
+            }
+        }
+        
+        if (spell.effects.includes('thunder_god_damage')) {
+            // 雷公助我效果（备用处理）
+            if (window.$spellSystem) {
+                window.$spellSystem.executeThunderGod(actor, target, spell, 0.8);
+            }
+        }
+        
+        if (spell.effects.includes('konami_revive')) {
+            // 不死秘籍效果
+            if (spell.reviveStateId && actor.addState) {
+                actor.addState(spell.reviveStateId);
+                if (spell.penaltyStateId) {
+                    actor.addState(spell.penaltyStateId);
+                }
+                console.log(`[Scene_Battle] 不死秘籍生效: ${actor.name()}获得复活状态`);
+            }
+        }
+        
+        if (spell.effects.includes('ultimate_magic_damage')) {
+            // 究极魔法效果（备用处理）
+            if (window.$spellSystem) {
+                window.$spellSystem.executeUltimateMagic(actor, target, spell, 0.8);
+            }
+        }
+        
+        if (spell.effects.includes('excalibur_damage')) {
+            // 契约胜利之剑效果（备用处理）
+            if (window.$spellSystem) {
+                window.$spellSystem.executeExcalibur(actor, target, spell, 0.8);
             }
         }
     };
@@ -319,6 +414,35 @@
                             member.addState(14); // 全属性提升
                         }
                     });
+                    break;
+                case 'buff':
+                    if (spell.buffStateId && target && target.addState) {
+                        target.addState(spell.buffStateId);
+                    }
+                    break;
+                case 'confuse':
+                    if (spell.confuseStateId && target && target.addState) {
+                        target.addState(spell.confuseStateId);
+                    }
+                    break;
+                case 'regen':
+                    if (spell.regenStateId && target && target.addState) {
+                        target.addState(spell.regenStateId);
+                    }
+                    break;
+                case 'slow':
+                    if (target && target.addState) {
+                        target.addState(5); // 缓慢状态
+                    }
+                    break;
+                case 'purify':
+                    if (target && target.states) {
+                        target.states().forEach(state => {
+                            if (state && state.id > 0 && state.restriction > 0) {
+                                target.removeState(state.id);
+                            }
+                        });
+                    }
                     break;
             }
         }
@@ -504,9 +628,22 @@
     // 战斗结束时清理
     const _Scene_Battle_terminate = Scene_Battle.prototype.terminate;
     Scene_Battle.prototype.terminate = function() {
-        // 强制重置咒语系统状态
+        console.log('[Scene_Battle] 战斗结束，开始清理');
+        
+        // 调用咒语系统的战斗结束清理
+        if (window.$spellSystem && window.$spellSystem.onBattleEnd) {
+            window.$spellSystem.onBattleEnd();
+        }
+        
+        // 强制重置咒语系统状态（备用）
         if (window.$spellSystem && window.$spellSystem.forceResetCasting) {
             window.$spellSystem.forceResetCasting();
+        }
+        
+        // 清空语音输入存储
+        if (window.$voiceDebugger && window.$voiceDebugger.onControlCleanup) {
+            console.log('[Scene_Battle] 清空语音输入存储');
+            window.$voiceDebugger.onControlCleanup();
         }
         
         // 恢复语音系统上下文
