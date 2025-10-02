@@ -435,7 +435,7 @@ class SpellSystem {
             name: '恶龙咆哮',
             incantation: '恶龙咆哮',
             element: 'none',
-            basePower: 167,  // MAT=30时伤害20-100左右（30×1.67×0.6~3.0≈30~150，音量敏感）
+            basePower: 120,  // MAT=30时伤害20-100左右（30×1.2×0.6~3.0≈22~108，音量敏感）
             powerMultiplier: 1.0,
             mpCost: 3,
             description: '完全依赖音量的技能，普通伤害略低于普攻，但高音量时威力惊人',
@@ -1620,11 +1620,34 @@ class SpellSystem {
                     break;
 
                 case 'laser_eye_fixed':
-                    // 镭射眼固定伤害 - 由Scene_Battle处理，这里只显示消息
-                    if (target) {
+                    // 镭射眼固定伤害 - 在SpellSystem中直接处理
+                    if (target && !target.isDead()) {
                         this.playSafeSe('Laser1', 90, 100);
                         this.addBattleMessage(`\\C[6]激光从${caster.name()}的眼中射出！\\C[0]`);
+                        
+                        // 直接造成40点固定伤害
+                        target.gainHp(-40);
+                        
+                        // 显示伤害弹窗
+                        if (target.startDamagePopup) {
+                            const originalResult = target._result;
+                            target._result = { hpDamage: 40, hpAffected: true };
+                            target.startDamagePopup();
+                            target._result = originalResult;
+                        }
+                        
+                        // 刷新状态
+                        if (target.refresh) {
+                            target.refresh();
+                        }
+                        
+                        // 检查死亡
+                        if (target.isDead() && target.performCollapse) {
+                            target.performCollapse();
+                        }
+                        
                         this.addBattleMessage(`\\C[2]${target.name()}\\C[0]受到了\\C[2]40\\C[0]点激光伤害！`);
+                        console.log(`[SpellSystem] 镭射眼生效: ${target.name()}受到40点固定伤害`);
                     }
                     break;
 
@@ -2454,7 +2477,7 @@ class SpellSystem {
         else if (volumeScore >= 0.40) volumeMultiplier = 1.0;  // C级：100%
         else volumeMultiplier = 0.6;  // D级：60%（低音量惩罚）
         
-        // 修复：basePower 80 就是 80%，直接使用
+        // 修复：basePower 120 就是 120%，直接使用
         // 基础伤害 = MAT × (basePower/100) × 音量倍率
         let damage = mat * (spell.basePower / 100) * volumeMultiplier;
         
@@ -2469,7 +2492,9 @@ class SpellSystem {
         console.log(`[SpellSystem] 恶龙咆哮伤害计算详情:`);
         console.log(`  - MAT: ${mat}`);
         console.log(`  - basePower: ${spell.basePower}% (${spell.basePower/100})`);
-        console.log(`  - 音量倍率: ${volumeMultiplier} (音量分数: ${volumeScore})`);
+        console.log(`  - 音量分数: ${volumeScore} (原始音量: max=${this.maxVolume}, avg=${this.averageVolume})`);
+        console.log(`  - 音量等级判定: ${volumeScore >= 0.90 ? 'SSS' : volumeScore >= 0.80 ? 'SS' : volumeScore >= 0.70 ? 'S' : volumeScore >= 0.60 ? 'A' : volumeScore >= 0.50 ? 'B' : volumeScore >= 0.40 ? 'C' : 'D'}`);
+        console.log(`  - 音量倍率: ${volumeMultiplier}`);
         
         const finalAccuracyMultiplier = Math.max(1.0, Math.min(2.0, accuracyMultiplier));
         console.log(`  - 准确度: ${accuracy} (准确度倍率: ${finalAccuracyMultiplier.toFixed(2)})`);

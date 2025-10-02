@@ -333,25 +333,8 @@
             
             console.log(`[Scene_Battle] 普通恢复生效: ${actor.name()}恢复了${healAmount}点HP`);
         } else if (spell.effects.includes('laser_eye_fixed')) {
-            // 镭射眼固定伤害
-            if (target && !target.isDead()) {
-                target.gainHp(-40);
-                
-                // 显示伤害弹窗
-                if (target.startDamagePopup) {
-                    const originalResult = target._result;
-                    target._result = { hpDamage: 40, hpAffected: true };
-                    target.startDamagePopup();
-                    target._result = originalResult;
-                }
-                
-                // 检查是否死亡
-                if (target.isDead() && target.performCollapse) {
-                    target.performCollapse();
-                }
-                
-                console.log(`[Scene_Battle] 镭射眼生效: ${target.name()}受到40点固定伤害`);
-            }
+            // 镭射眼固定伤害 - 现在由SpellSystem处理，这里只是备用
+            console.log(`[Scene_Battle] 镭射眼效果已由SpellSystem处理`);
         }
         
         // 特殊效果处理 - 添加这部分！
