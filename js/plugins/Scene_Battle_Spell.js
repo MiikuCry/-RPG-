@@ -67,6 +67,15 @@
             if (this._actorCommandWindow && this._actorCommandWindow.active && this._actorCommandWindow.refresh) {
                 this._actorCommandWindow.refresh();
             }
+            
+            // 检查战斗是否应该结束
+            if ($gameTroop && $gameTroop.isAllDead()) {
+                console.log('[Scene_Battle] 所有敌人已死亡，准备胜利');
+                setTimeout(() => BattleManager.processVictory(), 100);
+            } else if ($gameParty && $gameParty.isAllDead()) {
+                console.log('[Scene_Battle] 所有队员已死亡，准备失败');
+                setTimeout(() => BattleManager.processDefeat(), 100);
+            }
         } catch (e) {
             console.warn('[Scene_Battle] 刷新状态时出错:', e);
         }
@@ -97,19 +106,36 @@
         // 刷新状态
         this.safeRefreshStatus();
         
-        // 检查战斗结束
-        BattleManager.checkBattleEnd();
-        
-        // 如果战斗没有结束，继续战斗流程
-        if (!BattleManager.isBattleEnd()) {
+        // 延迟检查战斗结束，确保所有伤害和状态都已应用
+        setTimeout(() => {
+            console.log('[Scene_Battle] 延迟检查战斗结束');
+            
+            // 强制刷新敌人状态
+            if ($gameTroop) {
+                $gameTroop._enemies.forEach(enemy => {
+                    if (enemy && enemy.refresh) {
+                        enemy.refresh();
+                    }
+                });
+            }
+            
+            // 检查战斗结束
+            BattleManager.checkBattleEnd();
+            
+            // 再次延迟检查，确保战斗结束逻辑有时间执行
             setTimeout(() => {
-                if (BattleManager._subject) {
-                    BattleManager._subject.onAllActionsEnd();
-                    BattleManager._subject.removeCurrentAction();
+                if (!BattleManager.isBattleEnd()) {
+                    console.log('[Scene_Battle] 战斗未结束，继续战斗流程');
+                    if (BattleManager._subject) {
+                        BattleManager._subject.onAllActionsEnd();
+                        BattleManager._subject.removeCurrentAction();
+                    }
+                    this.continueAfterSpell();
+                } else {
+                    console.log('[Scene_Battle] 战斗已结束，不继续战斗流程');
                 }
-                this.continueAfterSpell();
-            }, 500);
-        }
+            }, 200);
+        }, 300);
     };
     
     // ============================================
@@ -228,11 +254,17 @@
     
     // 应用咒语效果
     Scene_Battle.prototype.applySpellEffects = function(actor, target, spell, damage) {
+        console.log(`[Scene_Battle] 应用咒语效果: ${spell.name}, 伤害: ${damage}, 目标: ${target ? target.name() : 'null'}`);
+        
         // 根据咒语效果处理
         if (spell.effects.includes('damage')) {
             // 攻击类咒语
             if (target && !target.isDead()) {
+                console.log(`[Scene_Battle] 目标当前HP: ${target.hp}/${target.mhp}, 即将造成${damage}伤害`);
+                
                 target.gainHp(-damage);
+                
+                console.log(`[Scene_Battle] 伤害应用后HP: ${target.hp}/${target.mhp}, 是否死亡: ${target.isDead()}`);
                 
                 // 显示伤害
                 if (target.startDamagePopup) {
@@ -242,9 +274,25 @@
                     target.performDamage();
                 }
                 
+                // 强制刷新状态
+                if (target.refresh) {
+                    target.refresh();
+                }
+                
                 // 检查是否死亡
-                if (target.isDead() && target.performCollapse) {
-                    target.performCollapse();
+                if (target.isDead()) {
+                    console.log(`[Scene_Battle] 目标已死亡，执行死亡动画`);
+                    if (target.performCollapse) {
+                        target.performCollapse();
+                    }
+                    
+                    // 延迟检查战斗是否结束
+                    setTimeout(() => {
+                        console.log(`[Scene_Battle] 目标死亡后检查战斗结束`);
+                        if (window.$spellSystem && window.$spellSystem.checkBattleEnd) {
+                            window.$spellSystem.checkBattleEnd(200);
+                        }
+                    }, 300);
                 }
             }
             
@@ -490,25 +538,33 @@
         
         try {
             if (window.BattleManager) {
-                if (window.BattleManager._action) {
-                    window.BattleManager._action = null;
+                console.log('[Scene_Battle] 咒语施法完成，检查战斗状态');
+                
+                // 首先检查战斗是否已经结束
+                if (BattleManager.isBattleEnd()) {
+                    console.log('[Scene_Battle] 战斗已结束，不重新激活窗口');
+                    return;
                 }
                 
-                if (window.BattleManager._subject) {
-                    console.log('[Scene_Battle] 结束角色行动:', window.BattleManager._subject.name());
-                    window.BattleManager.endAction();
-                } else {
-                    console.log('[Scene_Battle] 没有当前角色，尝试获取下一个行动者');
-                    window.BattleManager.selectNextCommand();
+                // 如果战斗未结束，回到命令选择状态
+                console.log('[Scene_Battle] 战斗未结束，回到命令选择状态');
+                
+                if (this._actorCommandWindow) {
+                    this._actorCommandWindow.activate();
+                    this._actorCommandWindow.open();
+                }
+                
+                // 确保战斗状态正确
+                if (window.BattleManager._phase !== 'input') {
+                    window.BattleManager._phase = 'input';
                 }
             }
         } catch (e) {
             console.error('[Scene_Battle] 继续战斗时出错:', e);
-            setTimeout(() => {
-                if (window.BattleManager) {
-                    window.BattleManager.selectNextCommand();
-                }
-            }, 500);
+            // 错误恢复：回到输入阶段
+            if (window.BattleManager && !BattleManager.isBattleEnd()) {
+                window.BattleManager._phase = 'input';
+            }
         }
     };
     
