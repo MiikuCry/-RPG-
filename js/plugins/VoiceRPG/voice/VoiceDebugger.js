@@ -124,7 +124,7 @@ class VoiceDebugger {
                 background: ${this.options.theme === 'dark' ? '#1a1a1a' : '#f5f5f5'};
                 padding: 10px 15px;
                 border-bottom: 1px solid ${this.options.theme === 'dark' ? '#333' : '#ddd'};
-                cursor: move;
+                cursor: default;
                 user-select: none;
             ">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -352,8 +352,8 @@ class VoiceDebugger {
             this.onControlCleanup();
         });
         
-        // 拖拽功能
-        this.enableDragging();
+        // 拖拽功能已禁用 - 窗口固定在右上角
+        // this.enableDragging();
         
         // 防止点击穿透
         this.preventClickThrough();
@@ -456,9 +456,30 @@ class VoiceDebugger {
     }
     
     /**
+     * 重置窗口位置到右上角
+     */
+    resetPosition() {
+        const positions = {
+            'top-left': { top: '10px', left: '10px', right: 'auto', bottom: 'auto' },
+            'top-right': { top: '10px', right: '10px', left: 'auto', bottom: 'auto' },
+            'bottom-left': { bottom: '10px', left: '10px', top: 'auto', right: 'auto' },
+            'bottom-right': { bottom: '10px', right: '10px', top: 'auto', left: 'auto' }
+        };
+        
+        const pos = positions[this.options.position] || positions['top-right'];
+        
+        // 重置所有位置属性
+        this.debugUI.style.top = pos.top;
+        this.debugUI.style.left = pos.left;
+        this.debugUI.style.right = pos.right;
+        this.debugUI.style.bottom = pos.bottom;
+    }
+    
+    /**
      * 显示调试器
      */
     show() {
+        this.resetPosition(); // 每次显示时重置位置
         this.debugUI.style.display = 'block';
         this.isVisible = true;
     }

@@ -633,6 +633,27 @@
             };
             
             console.log('[VoiceRPG] 模块加载完成:', Object.keys(this.modules));
+            
+            // 检查SpellLearning依赖
+            this.checkSpellLearningDependency();
+        }
+        
+        /**
+         * 检查SpellLearning依赖
+         */
+        checkSpellLearningDependency() {
+            // 延迟检查，确保所有插件都已加载
+            setTimeout(() => {
+                if (window.$spellSystem && window.$spellLearning) {
+                    console.log('[VoiceRPG] SpellSystem 和 SpellLearning 都已就绪');
+                } else if (window.$spellSystem && !window.$spellLearning) {
+                    console.warn('[VoiceRPG] SpellSystem 已就绪，但 SpellLearning 未找到');
+                } else if (!window.$spellSystem && window.$spellLearning) {
+                    console.warn('[VoiceRPG] SpellLearning 已就绪，但 SpellSystem 未找到');
+                } else {
+                    console.error('[VoiceRPG] SpellSystem 和 SpellLearning 都未找到！');
+                }
+            }, 1000);
         }
         
         /**

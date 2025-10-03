@@ -58,8 +58,6 @@ class SpellSystem {
             perfectCasts: 0
         };
         
-        // 学习的咒语ID列表
-        this.learnedSpells = new Map();
         
         // 冷却管理（v3.0新增）
         this.cooldowns = new Map();
@@ -163,6 +161,37 @@ class SpellSystem {
             
             // 契约胜利之剑
             '契约胜利之剑': ['契约胜利之剑', '契约胜利之间', '契约胜利之建', '契约胜利只见', '契约胜利支剑', '契约胜利之见', '契约胜利之键', '契约胜利之健', '契约胜利之箭', '契约胜利之检', '契约胜利之减', '契约胜利之坚', '契约胜利之肩', '契约胜利之尖', '契约胜利之煎', '契约胜利之兼'],
+            
+            // ========== 繁体中文咒语同音字映射 ==========
+            
+            // 普通攻击 - 繁体版
+            '吃我一劍': ['吃我一劍', '吃我一賤', '吃我一件', '遲我一劍', '吃我一角', '吃我衣劍', '持我一劍', '吃我一見', '吃我一建', '吃我一健', '吃我一鍵', '吃我一箭', '吃我一間', '吃我一檢', '吃我一減', '遲我一見', '遲我一建', '持我一見', '持我一建', '赤我一劍', '吃握一劍'],
+            '普通攻擊': ['普通攻擊', '普通公雞', '普通攻加', '撲通攻擊', '普通工擊', '普通攻機', '普通攻記', '普通攻急', '普通攻集', '普通攻及', '撲通攻加', '撲通工擊', '普童攻擊', '普通功擊', '普通公擊', '普通共擊'],
+            
+            // 恶龙咆哮 - 繁体版
+            '惡龍咆哮': ['惡龍咆哮', '惡龍怒吼', '惡龍吼叫', '餓龍咆哮', '惡龍拋消', '惡龍炮嘯', '惡龍泡笑', '餓龍怒吼', '惡隆咆哮', '惡龍跑笑', '惡龍拋笑', '惡龍炮消', '惡龍泡消', '餓隆咆哮', '惡龍怒號', '惡龍暴哮', '惡龍吼號'],
+            
+            // 邪王真眼 - 繁体版
+            '漆黑烈焰使的契約者啊與汝締結永劫之羈絆邪王真眼全開': [
+                '漆黑烈焰使的契約者啊與汝締結永劫之羈絆邪王真眼全開',
+                '漆黑烈焰使的契約者阿與汝締結永劫之羈絆邪王真眼全開',
+                '漆黑烈焰使的契約者啊與汝締結永劫之羈絆斜王真眼全開',
+                '漆黑列焰使的契約者啊與汝締結永劫之羈絆邪王真眼全開',
+                '漆黑烈焰使的契約者啊與汝締結永劫之雞伴邪王真眼全開',
+                '漆黑烈焰使的契約者啊與女締結永劫之羈絆邪王真眼全開',
+                '七黑烈焰使的契約者啊與汝締結永劫之羈絆邪王真眼全開'
+            ],
+            '邪王真眼': ['邪王真眼', '斜王真眼', '邪王真言', '邪王瞎眼', '寫王真眼', '謝王真眼', '邪王尊嚴', '邪望真眼', '邪忘真眼', '邪網真眼', '邪王珍眼', '邪王針眼', '邪王真嚴', '邪王真研', '邪王真炎', '邪王真演', '邪王真煙', '斜望真眼', '協王真眼', '鞋王真眼', '邪皇真眼'],
+            
+            // 镭射眼 - 繁体版
+            '鐳射眼': ['鐳射眼', '雷蛇眼', '雷神眼', '鐳射煙', '雷蛇煙', '雷神煙', '雷射眼', '雷設眼', '雷色眼', '雷涉眼', '雷攝眼', '雷舌眼', '鐳設眼', '鐳色眼', '鐳涉眼', '鐳攝眼', '鐳舌眼', '來射眼', '來設眼', '來色眼'],
+            '電眼逼人': ['電眼逼人', '電影別人', '電影逼人', '電音別人', '電音逼人', '電眼別人', '電眼逼仁', '電眼逼任', '電眼逼忍', '電眼逼認', '電眼比人', '電眼比仁', '電眼比任', '店眼逼人', '點眼逼人', '電研逼人', '電演逼人'],
+            
+            // 认真的一拳 - 繁体版
+            '認真的一拳': ['認真的一拳', '認真的一圈', '認真的一惜', '認真地一拳', '認真得一拳', '人真的一拳', '認真的一券', '認真的一全', '認真的一權', '認真的一泉', '認真的一犬', '認真的一群', '認真的一缺', '認真的一確', '任真的一拳', '仁真的一拳', '認珍的一拳', '認針的一拳', '認真得一圈', '認真地一圈'],
+            
+            // 火球术 - 繁体版
+            '火球術': ['火球術', '火球書', '火求術', '火球數', '夥球術', '活球術', '或球術', '火求書', '火球素', '火求數', '火球速', '火求速', '貨球術', '火秋術', '火丘術', '火球輸', '火球樹', '火球鼠', '火球蔬'],
         };
         
         // 初始化默认咒语
@@ -406,6 +435,8 @@ class SpellSystem {
         this.registerSpell('normal_attack', {
             name: '普通攻击',
             incantation: '吃我一剑',
+            alternativeName: '普通攻擊',
+            traditionalIncantation: '吃我一劍',
             element: 'none',
             basePower: 100,  // ATK=30时伤害30左右
             powerMultiplier: 1.0,
@@ -420,6 +451,7 @@ class SpellSystem {
         this.registerSpell('fire_ball', {
             name: '火球术',
             incantation: '比那黑更黑的深渊祈求吾之深红闪光觉醒之时已然降临',
+            alternativeName: '火球術',
             element: 'fire',
             basePower: 103,  // MAT=30时伤害40左右（30×1.03×1.3≈40）
             powerMultiplier: 1.3,
@@ -434,6 +466,8 @@ class SpellSystem {
         this.registerSpell('dragon_roar', {
             name: '恶龙咆哮',
             incantation: '恶龙咆哮',
+            alternativeName: '惡龍咆哮',
+            traditionalIncantation: '惡龍咆哮',
             element: 'none',
             basePower: 120,  // MAT=30时伤害20-100左右（30×1.2×0.6~3.0≈22~108，音量敏感）
             powerMultiplier: 1.0,
@@ -441,7 +475,7 @@ class SpellSystem {
             description: '完全依赖音量的技能，普通伤害略低于普攻，但高音量时威力惊人',
             difficulty: 2,
             effects: ['damage'],
-            volumeMultiplier: 15.0,
+            volumeMultiplier: 20.0,
             minDamage: 1,
             maxDamage: 999,
             isPhysical: false
@@ -451,6 +485,8 @@ class SpellSystem {
         this.registerSpell('evil_eye', {
             name: '邪王真眼',
             incantation: '漆黑烈焰使的契约者啊与汝缔结永劫之羁绊邪王真眼全开',
+            alternativeName: '邪王真眼',
+            traditionalIncantation: '漆黑烈焰使的契約者啊與汝締結永劫之羈絆邪王真眼全開',
             element: 'dark',
             basePower: 0,
             mpCost: 30,
@@ -481,10 +517,11 @@ class SpellSystem {
             name: '所累哇都塔纳',
             incantation: '那又如何',
             alternativeName: '所累哇都塔纳',
+            traditionalIncantation: '那又如何',
             element: 'none',
             basePower: 0,
             mpCost: 20,
-            description: '将大局逆转吧！',
+            description: '将大局逆转吧！开！',
             difficulty: 2,
             effects: ['soredowa_dokana'],
             isSpecialBoss: true,
@@ -497,6 +534,8 @@ class SpellSystem {
         this.registerSpell('laser_eye', {
             name: '镭射眼',
             incantation: '电眼逼人',
+            alternativeName: '鐳射眼',
+            traditionalIncantation: '電眼逼人',
             element: 'none',
             basePower: 30,
             mpCost: 10,
@@ -511,6 +550,8 @@ class SpellSystem {
         this.registerSpell('serious_punch', {
             name: '认真的一拳',
             incantation: '认真的一拳',
+            alternativeName: '認真的一拳',
+            traditionalIncantation: '認真的一拳',
             element: 'none',
             basePower: 0,
             mpCost: 50,
@@ -658,6 +699,7 @@ class SpellSystem {
             name: config.name || '未命名咒语',
             incantation: config.incantation,
             alternativeName: config.alternativeName,
+            traditionalIncantation: config.traditionalIncantation,
             element: config.element || 'none',
             basePower: config.basePower || 115,  // 默认提升15点
             powerMultiplier: config.powerMultiplier || 1.0,
@@ -793,10 +835,11 @@ class SpellSystem {
             return false;
         }
         
-        // 初始化角色咒语
-        if (!this.learnedSpells.has(actorId) || this.learnedSpells.get(actorId).size === 0) {
-            console.log('[SpellSystem] 角色还没有学会任何咒语，自动初始化基础咒语');
-            this.initializeActorSpells(actorId);
+        // 检查角色是否学会咒语（委托给SpellLearning系统）
+        if (!this.hasLearnedSpell(actorId, 'fire_ball')) {
+            console.log('[SpellSystem] 角色还没有学会基础咒语，请使用SpellLearning插件学习');
+            this.showFailMessage('角色还没有学会任何咒语！');
+            return;
         }
         
         // 设置目标
@@ -1244,6 +1287,17 @@ class SpellSystem {
                 
                 if (altAccuracy > accuracy) {
                     accuracy = altAccuracy;
+                    isAlternative = true;
+                }
+            }
+            
+            // 测试繁体中文咒文
+            if (spell.traditionalIncantation) {
+                const tradAccuracy = this.calculateAccuracyWithPhonetic(text, spell.traditionalIncantation);
+                console.log(`[SpellSystem] 测试繁体咒文"${spell.traditionalIncantation}"，准确度:${tradAccuracy}`);
+                
+                if (tradAccuracy > accuracy) {
+                    accuracy = tradAccuracy;
                     isAlternative = true;
                 }
             }
@@ -2578,107 +2632,85 @@ class SpellSystem {
     // ========== 辅助方法 ==========
     
     /**
-     * 角色学习咒语（记录学习顺序）
-     */
-    learnSpell(actorId, spellId) {
-        if (!this.learnedSpells.has(actorId)) {
-            this.learnedSpells.set(actorId, new Set());
-        }
-        
-        // 如果还没学过这个咒语，才添加到学习顺序中
-        const wasAlreadyLearned = this.learnedSpells.get(actorId).has(spellId);
-        this.learnedSpells.get(actorId).add(spellId);
-        
-        console.log(`[SpellSystem] 角色${actorId}学会了咒语: ${spellId}`);
-        
-        const actor = $gameActors.actor(actorId);
-        if (actor) {
-            actor._learnedSpells = Array.from(this.learnedSpells.get(actorId));
-            
-            // 记录学习顺序
-            if (!actor._learnedSpellsOrder) {
-                actor._learnedSpellsOrder = [];
-            }
-            
-            // 只有新学的咒语才添加到顺序列表末尾
-            if (!wasAlreadyLearned && !actor._learnedSpellsOrder.includes(spellId)) {
-                actor._learnedSpellsOrder.push(spellId);
-                console.log(`[SpellSystem] 更新学习顺序: ${actor._learnedSpellsOrder.join(', ')}`);
-            }
-        }
-    }
-    
-    /**
-     * 批量学习咒语
-     */
-    learnSpells(actorId, spellIds) {
-        spellIds.forEach(spellId => this.learnSpell(actorId, spellId));
-    }
-    
-    /**
-     * 检查角色是否学会了咒语
+     * 检查角色是否学会了咒语（委托给SpellLearning系统）
      */
     hasLearnedSpell(actorId, spellId) {
-        if (!this.learnedSpells.has(actorId)) {
-            const actor = $gameActors.actor(actorId);
-            if (actor && actor._learnedSpells) {
-                this.learnedSpells.set(actorId, new Set(actor._learnedSpells));
-            } else {
-                return false;
-            }
+        // 委托给SpellLearning系统处理
+        if (window.$spellLearning) {
+            return window.$spellLearning.hasLearnedSpell(actorId, spellId);
         }
         
-        return this.learnedSpells.get(actorId).has(spellId);
+        // 回退到直接检查角色数据
+        const actor = $gameActors.actor(actorId);
+        return actor && actor._learnedSpells && actor._learnedSpells.includes(spellId);
     }
-    
+
     /**
-     * 获取角色已学会的咒语列表（按学习顺序排列）
+     * 获取角色已学会的咒语列表（委托给SpellLearning系统）
      */
     getLearnedSpells(actorId) {
-        const learned = [];
-        const spellIds = this.learnedSpells.get(actorId) || new Set();
-        
-        // 如果角色有学习顺序记录，按顺序返回
-        const actor = $gameActors.actor(actorId);
-        if (actor && actor._learnedSpellsOrder) {
-            // 按学习顺序遍历
-            for (const spellId of actor._learnedSpellsOrder) {
-                if (spellIds.has(spellId) && this.spells.has(spellId)) {
-                    learned.push(this.spells.get(spellId));
-                }
-            }
-            
-            // 添加任何在Set中但不在顺序列表中的咒语（兼容性处理）
-            for (const spellId of spellIds) {
-                if (!actor._learnedSpellsOrder.includes(spellId) && this.spells.has(spellId)) {
-                    learned.push(this.spells.get(spellId));
-                }
-            }
-        } else {
-            // 如果没有顺序记录，按默认顺序（注册顺序）
-            for (const [id, spell] of this.spells) {
-                if (spellIds.has(id)) {
-                    learned.push(spell);
-                }
-            }
+        // 委托给SpellLearning系统处理
+        if (window.$spellLearning) {
+            return window.$spellLearning.getLearnedSpells(actorId);
         }
         
+        // 回退到直接检查角色数据
+        const actor = $gameActors.actor(actorId);
+        if (!actor || !actor._learnedSpells) {
+            return [];
+        }
+        
+        const learned = [];
+        for (const spellId of actor._learnedSpells) {
+            if (this.spells.has(spellId)) {
+                learned.push(this.spells.get(spellId));
+            }
+        }
         return learned;
     }
     
     /**
-     * 初始化角色的默认咒语
+     * 学习咒语（向后兼容方法，委托给SpellLearning系统）
      */
-    initializeActorSpells(actorId) {
-        // 默认学会基础咒语
-        const basicSpells = ['fire_ball', 'normal_attack', 'normal_heal'];
-        this.learnSpells(actorId, basicSpells);
+    learnSpell(actorId, spellId) {
+        console.log(`[SpellSystem] 向后兼容调用：learnSpell(${actorId}, ${spellId})`);
         
-        console.log('[SpellSystem] 火球术是否已注册:', this.spells.has('fire_ball'));
-        console.log('[SpellSystem] 火球术数据:', this.spells.get('fire_ball'));
-        console.log('[SpellSystem] 普通恢复是否已注册:', this.spells.has('normal_heal'));
-        console.log('[SpellSystem] 普通恢复数据:', this.spells.get('normal_heal'));
+        if (window.$spellLearning) {
+            return window.$spellLearning.learnSpell(actorId, spellId);
+        } else {
+            console.error('[SpellSystem] SpellLearning系统未找到！');
+            return false;
+        }
     }
+    
+    /**
+     * 批量学习咒语（向后兼容方法，委托给SpellLearning系统）
+     */
+    learnSpells(actorId, spellIds) {
+        console.log(`[SpellSystem] 向后兼容调用：learnSpells(${actorId}, [${spellIds.join(', ')}])`);
+        
+        if (window.$spellLearning) {
+            return window.$spellLearning.learnSpells(actorId, spellIds);
+        } else {
+            console.error('[SpellSystem] SpellLearning系统未找到！');
+            return false;
+        }
+    }
+    
+    /**
+     * 忘记咒语（向后兼容方法，委托给SpellLearning系统）
+     */
+    forgetSpell(actorId, spellId) {
+        console.log(`[SpellSystem] 向后兼容调用：forgetSpell(${actorId}, ${spellId})`);
+        
+        if (window.$spellLearning) {
+            return window.$spellLearning.forgetSpell(actorId, spellId);
+        } else {
+            console.error('[SpellSystem] SpellLearning系统未找到！');
+            return false;
+        }
+    }
+    
     
     /**
      * 检查施法条件
@@ -3214,98 +3246,3 @@ if (typeof module !== 'undefined' && module.exports) {
 } else {
     window.SpellSystem = SpellSystem;
 }
-
-// === 存档持久化：确保通过事件学会的咒语在存读档后仍然存在 ===
-(() => {
-    // 备份原函数
-    const _DM_makeSaveContents = DataManager.makeSaveContents;
-    const _DM_extractSaveContents = DataManager.extractSaveContents;
-
-    // 保存：把 $spellSystem.learnedSpells 序列化到存档
-    DataManager.makeSaveContents = function() {
-        const contents = _DM_makeSaveContents.call(this);
-        try {
-            if (window.$spellSystem && window.$spellSystem.learnedSpells) {
-                const serialized = {};
-                for (const [actorId, set] of window.$spellSystem.learnedSpells.entries()) {
-                    serialized[actorId] = Array.from(set);
-                }
-                contents._voiceRPG_spellSystem = contents._voiceRPG_spellSystem || {};
-                contents._voiceRPG_spellSystem.learnedSpells = serialized;
-            }
-        } catch (e) {
-            console.warn('[SpellSystem] 保存learnedSpells时出错:', e);
-        }
-        return contents;
-    };
-
-    // 读取：从存档恢复到 $spellSystem.learnedSpells，并同步到角色对象
-    DataManager.extractSaveContents = function(contents) {
-        _DM_extractSaveContents.call(this, contents);
-        try {
-            const payload = contents && contents._voiceRPG_spellSystem && contents._voiceRPG_spellSystem.learnedSpells;
-            if (window.$spellSystem && payload) {
-                const restored = new Map();
-                Object.keys(payload).forEach(key => {
-                    const actorId = Number(key);
-                    restored.set(actorId, new Set(payload[key] || []));
-                });
-                window.$spellSystem.learnedSpells = restored;
-
-                    // 同步到角色实例，便于 hasLearnedSpell 的回退读取
-                    if ($gameActors && typeof $gameActors.actor === 'function') {
-                        restored.forEach((set, actorId) => {
-                            const actor = $gameActors.actor(actorId);
-                            if (actor) {
-                                actor._learnedSpells = Array.from(set);
-                                // 如果没有学习顺序，根据当前学会的咒语创建一个默认顺序
-                                if (!actor._learnedSpellsOrder) {
-                                    actor._learnedSpellsOrder = Array.from(set);
-                                    console.log(`[SpellSystem] 为角色${actorId}创建默认学习顺序:`, actor._learnedSpellsOrder);
-                                }
-                            }
-                        });
-                    }
-                
-                console.log('[SpellSystem] 咒语学习数据已从存档恢复:', restored);
-            } else {
-                console.log('[SpellSystem] 存档中没有咒语学习数据，使用默认设置');
-            }
-        } catch (e) {
-            console.warn('[SpellSystem] 读取learnedSpells时出错:', e);
-        }
-    };
-    
-    // 页面刷新时的数据恢复
-    const _Scene_Boot_start = Scene_Boot.prototype.start;
-    Scene_Boot.prototype.start = function() {
-        _Scene_Boot_start.call(this);
-        
-        // 延迟恢复数据，确保所有系统都已初始化
-        setTimeout(() => {
-            if (window.$spellSystem && $gameSystem) {
-                // 检查是否有存档数据需要恢复
-                const saveData = DataManager.loadGame(DataManager.latestSavefileId());
-                if (saveData && saveData._voiceRPG_spellSystem && saveData._voiceRPG_spellSystem.learnedSpells) {
-                    console.log('[SpellSystem] 检测到存档数据，恢复咒语学习状态');
-                    const restored = new Map();
-                    Object.keys(saveData._voiceRPG_spellSystem.learnedSpells).forEach(key => {
-                        const actorId = Number(key);
-                        restored.set(actorId, new Set(saveData._voiceRPG_spellSystem.learnedSpells[key] || []));
-                    });
-                    window.$spellSystem.learnedSpells = restored;
-                    
-                    // 同步到角色实例
-                    if ($gameActors && typeof $gameActors.actor === 'function') {
-                        restored.forEach((set, actorId) => {
-                            const actor = $gameActors.actor(actorId);
-                            if (actor) {
-                                actor._learnedSpells = Array.from(set);
-                            }
-                        });
-                    }
-                }
-            }
-        }, 500);
-    };
-})();

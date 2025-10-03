@@ -238,7 +238,7 @@ class CommandSystem {
     initializeDefaultCommands() {
         // 移动命令 - 优化模式，避免歧义
         this.registerCommand('move_up', {
-            patterns: ['上', '向上', '往上', '上走', '上面', '少', '伤'],
+            patterns: ['上', '向上', '往上', '上走', '上面', '少', '伤', '傷'],
             action: 'up',
             contexts: ['game', 'menu', 'battle'],
             description: '向上移动/选择',
@@ -246,7 +246,7 @@ class CommandSystem {
         });
         
         this.registerCommand('move_down', {
-            patterns: ['下', '向下', '往下', '下走', '下面', '夏', '吓'],
+            patterns: ['下', '向下', '往下', '下走', '下面', '夏', '吓', '嚇'],
             action: 'down',
             contexts: ['game', 'menu', 'battle'],
             description: '向下移动/选择',
@@ -254,7 +254,7 @@ class CommandSystem {
         });
         
         this.registerCommand('move_left', {
-            patterns: ['左', '向左', '往左', '左走', '左边', '左转', '作', '做', '坐'],
+            patterns: ['左', '向左', '往左', '左走', '左边', '左转', '作', '做', '坐', '左邊', '左轉'],
             action: 'left',
             contexts: ['game', 'menu', 'battle'],
             description: '向左移动/选择',
@@ -262,7 +262,7 @@ class CommandSystem {
         });
         
         this.registerCommand('move_right', {
-            patterns: ['右', '向右', '往右', '右走', '右边', '右转', '有', '又', '油'],
+            patterns: ['右', '向右', '往右', '右走', '右边', '右转', '有', '又', '油', '右邊', '右轉'],
             action: 'right',
             contexts: ['game', 'menu', 'battle'],
             description: '向右移动/选择',
@@ -271,7 +271,7 @@ class CommandSystem {
         
         // 交互命令
         this.registerCommand('interact', {
-            patterns: ['确认', '确定', '是', '好', '互动', '进入', '选择', 'OK', '事', '号', '可以'],
+            patterns: ['确认', '确定', '是', '好', '互动', '进入', '选择', 'OK', '事', '号', '可以', '確認', '確定', '互動', '進入', '選擇', '號'],
             action: 'ok',
             contexts: ['game', 'dialogue', 'menu', 'message', 'battle'],
             description: '确认/交互',
@@ -279,7 +279,7 @@ class CommandSystem {
         });
         
         this.registerCommand('cancel', {
-            patterns: ['取消', '返回', '退出', '不', '否', '后退', '关闭', '算了'],
+            patterns: ['取消', '返回', '退出', '不', '否', '后退', '关闭', '算了', '後退', '關閉'],
             action: 'cancel',
             contexts: ['game', 'dialogue', 'menu', 'message', 'battle'],
             description: '取消/返回',
@@ -289,7 +289,7 @@ class CommandSystem {
         // 菜单命令
         this.registerCommand('menu', {
             patterns: ['菜单', '系统', '设置', '暂停', '打开菜单', 'ESC',
-                      '才但', '彩单', '西通', '西统'],
+                      '才但', '彩单', '西通', '西统', '菜單', '系統', '設置', '暫停', '打開菜單'],
             action: 'escape',
             contexts: ['game', 'map'],
             description: '打开菜单',
@@ -298,7 +298,7 @@ class CommandSystem {
         
         // 战斗专用命令
         this.registerCommand('attack', {
-            patterns: ['攻击', '打击', '普攻', '打', '击', '进攻'],
+            patterns: ['攻击', '打击', '普攻', '打', '击', '进攻', '攻擊', '打擊', '進攻'],
             action: 'ok',
             contexts: ['battle'],
             description: '普通攻击',
@@ -306,7 +306,7 @@ class CommandSystem {
         });
         
         this.registerCommand('skill', {
-            patterns: ['技能', '魔法', '法术', '咒语'],
+            patterns: ['技能', '魔法', '法术', '咒语', '法術', '咒語'],
             action: 'skill',
             contexts: ['battle'],
             description: '使用技能',
@@ -322,7 +322,7 @@ class CommandSystem {
         });
         
         this.registerCommand('guard', {
-            patterns: ['防御', '防守', '格挡', '守护'],
+            patterns: ['防御', '防守', '格挡', '守护', '防禦', '格擋', '守護'],
             action: 'guard',
             contexts: ['battle'],
             description: '防御',
@@ -339,7 +339,7 @@ class CommandSystem {
         
         // 战斗目标选择
         this.registerCommand('target_enemy', {
-            patterns: ['敌人', '怪物', '目标', '那个'],
+            patterns: ['敌人', '怪物', '目标', '那个', '敵人', '那個'],
             action: 'ok',
             contexts: ['battle'],
             description: '选择敌人',
@@ -348,7 +348,7 @@ class CommandSystem {
         
         // 翻页命令
         this.registerCommand('page_up', {
-            patterns: ['上一页', '前一页', '翻上页'],
+            patterns: ['上一页', '前一页', '翻上页', '上一頁', '前一頁', '翻上頁'],
             action: 'pageup',
             contexts: ['menu', 'battle'],
             description: '上一页',
@@ -356,7 +356,7 @@ class CommandSystem {
         });
         
         this.registerCommand('page_down', {
-            patterns: ['下一页', '后一页', '翻下页'],
+            patterns: ['下一页', '后一页', '翻下页', '下一頁', '後一頁', '翻下頁'],
             action: 'pagedown',
             contexts: ['menu', 'battle'],
             description: '下一页',
